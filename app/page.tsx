@@ -54,7 +54,8 @@ export default function Home() {
             </h1>
             <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto">
               A revolutionary protocol that ensures video authenticity through cryptographic verification, 
-              protecting viewers from AI-generated deception.
+              protecting viewers from AI-generated deception. Built on C2PA standards and leveraging 
+              distributed ledger technology (DLT) for Authentication of Media via Provenance (AMP).
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button className="bg-blue-600 text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-blue-700 transition shadow-lg hover:shadow-xl transform hover:-translate-y-1">
@@ -142,7 +143,8 @@ export default function Home() {
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
               A cryptographic protocol that creates an unbreakable chain of authenticity from device 
-              to platform, ensuring every video can be verified as genuine.
+              to platform, ensuring every video can be verified as genuine. Built on C2PA (Coalition for Content Provenance and Authenticity) 
+              standards and powered by distributed ledger technology (DLT) for Authentication of Media via Provenance (AMP).
             </p>
           </div>
 
@@ -160,7 +162,7 @@ export default function Home() {
                     <h4 className="font-bold text-gray-900 mb-2">Device Capture</h4>
                     <p className="text-gray-600">
                       Videos are cryptographically signed at the moment of capture by trusted devices 
-                      (iPhone, Pixel, Samsung, etc.)
+                      (iPhone, Pixel, Samsung, etc.) using C2PA-compliant protocols for Authentication of Media via Provenance (AMP).
                     </p>
                   </div>
                 </div>
@@ -226,7 +228,7 @@ export default function Home() {
                   <Lock className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
-                  <span className="font-semibold text-gray-900">Blockchain Verified</span>
+                  <span className="font-semibold text-gray-900">DLT Verified</span>
                   <Layers className="h-6 w-6 text-purple-600" />
                 </div>
               </div>
@@ -322,8 +324,9 @@ export default function Home() {
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">Unbreakable</h3>
                   <p className="text-gray-600">
-                    Built on blockchain or similar immutable technology, ensuring the protocol cannot be 
-                    compromised, forged, or circumvented by bad actors.
+                    Built on distributed ledger technology (DLT) and blockchain, ensuring the protocol cannot be 
+                    compromised, forged, or circumvented by bad actors. The immutable nature of DLT provides 
+                    a tamper-proof foundation for Authentication of Media via Provenance (AMP) verification.
                   </p>
                 </div>
               </div>
