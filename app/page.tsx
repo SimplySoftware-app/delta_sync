@@ -24,8 +24,8 @@ export default function Home() {
               <a href="#solution" className="text-[#1C1C1E] hover:text-[#2c3b4d] transition">Solution</a>
               <a href="#principles" className="text-[#1C1C1E] hover:text-[#2c3b4d] transition">Principles</a>
             </div>
-            <Button>
-              Get Started
+            <Button disabled asChild>
+              <a href="mailto:info@deltasync.cloud">Get Started</a>
             </Button>
           </div>
         </div>
@@ -51,11 +51,8 @@ export default function Home() {
               distributed ledger technology (DLT) for Authentication of Media via Provenance (AMP).
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg">
-                Join the Waitlist
-              </Button>
-              <Button variant="outline" size="lg">
-                Learn More
+              <Button size="lg" asChild>
+                <a href="mailto:info@deltasync.cloud">Join the Waitlist</a>
               </Button>
             </div>
           </div>
@@ -155,7 +152,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div className="max-w-3xl mx-auto">
             <div>
               <h3 className="text-3xl font-bold text-[#1C1C1E] mb-6">How It Works</h3>
               <div className="space-y-6">
@@ -220,28 +217,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
-            <Card className="shadow-xl">
-              <CardContent className="pt-6">
-                <div className="aspect-square bg-gradient-to-br from-[#2c3b4d]/10 to-[#a35139]/10 rounded-xl flex items-center justify-center mb-6">
-                  <Logo size={128} />
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-[#a35139]/10 rounded-lg">
-                    <span className="font-semibold text-[#1C1C1E]">Authenticity</span>
-                    <CheckCircle className="h-6 w-6 text-[#a35139]" />
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-[#2c3b4d]/10 rounded-lg">
-                    <span className="font-semibold text-[#1C1C1E]">Privacy Protected</span>
-                    <Lock className="h-6 w-6 text-[#2c3b4d]" />
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-[#2c3b4d]/10 rounded-lg">
-                    <span className="font-semibold text-[#1C1C1E]">DLT Verified</span>
-                    <Layers className="h-6 w-6 text-[#2c3b4d]" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </section>
@@ -381,11 +356,11 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-2xl mx-auto mb-12">
-            <Button size="lg" variant="secondary">
-              Get Early Access
+            <Button size="lg" variant="secondary" asChild>
+              <a href="mailto:info@deltasync.cloud">Get Early Access</a>
             </Button>
-            <Button size="lg" variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20">
-              Learn More
+            <Button size="lg" variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20" asChild>
+              <a href="https://carloseduardo.es/">Learn More</a>
             </Button>
           </div>
 
