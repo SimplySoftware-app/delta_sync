@@ -1,0 +1,30 @@
+# DeltaSync signing authority behind an existing Caddy container.
+#
+# Caddy and this service share an external Docker network. Caddy proxies by
+# container name. This file publishes no host ports, and it does not bind
+# 127.0.0.1.
+
+services:
+  delta-sync:
+    build: .
+    image: delta-sync-server:local
+    container_name: delta-sync
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LISTEN_ADDR: 0.0.0.0:8080
+      DATA_DIR: /data
+    volumes:
+      - delta-sync-data:/data
+    networks:
+      - caddy
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_DOCKER_NETWORK:-caddy}
+
+volumes:
+  delta-sync-data:

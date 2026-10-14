@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capture v1. The Apple App Attestation root is a public CA, not a secret.
+!server/certs/Apple_App_Attestation_Root_CA.pem
+!server/.env.example
+/server/target/
+/server/data/
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+/android/.idea/
+*.keystore
+*.jks
+/ios/**/xcuserdata/
+/ios/**/DerivedData/
