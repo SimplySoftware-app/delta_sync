@@ -116,3 +116,13 @@ Copyright © 2025 DeltaSync. All rights reserved.
 ## Contact
 
 For inquiries, visit [deltasync.cloud](https://deltasync.cloud)
+
+## Capture v1
+
+The site above is unchanged. Device capture lives in three new folders:
+
+- `server/` is the Rust signing authority and C2PA `/verify` service.
+- `ios/` is the SwiftUI camera app.
+- `android/` is the Compose camera app.
+
+The trust chain, what is real, and what is stubbed are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

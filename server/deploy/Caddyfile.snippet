@@ -1,0 +1,6 @@
+# Snippet for the Caddy container that already terminates TLS.
+# The site address is whatever name you point at the Hetzner host.
+
+verify.deltasync.cloud {
+	reverse_proxy delta-sync:8080
+}

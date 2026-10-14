@@ -1,0 +1,5 @@
+target
+data
+.env
+*.pem
+!certs/Apple_App_Attestation_Root_CA.pem

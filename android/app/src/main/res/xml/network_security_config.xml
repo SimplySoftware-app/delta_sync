@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Development: the phone talks to a LAN signing authority over HTTP. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
