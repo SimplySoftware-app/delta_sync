@@ -25,7 +25,7 @@ export default function Home() {
               <a href="#principles" className="text-[#1C1C1E] hover:text-[#2c3b4d] transition">Principles</a>
             </div>
             <Button disabled asChild>
-              <a href="mailto:info@deltasync.cloud">Get Started</a>
+              <a href="mailto:info@deltasync.simplysoftware.app">Get Started</a>
             </Button>
           </div>
         </div>
@@ -52,7 +52,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild>
-                <a href="mailto:info@deltasync.cloud">Join the Waitlist</a>
+                <a href="mailto:info@deltasync.simplysoftware.app">Join the Waitlist</a>
               </Button>
             </div>
           </div>
@@ -357,7 +357,7 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-2xl mx-auto mb-12">
             <Button size="lg" variant="secondary" asChild>
-              <a href="mailto:info@deltasync.cloud">Get Early Access</a>
+              <a href="mailto:info@deltasync.simplysoftware.app">Get Early Access</a>
             </Button>
             <Button size="lg" variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20" asChild>
               <a href="https://carloseduardo.es/">Learn More</a>
@@ -421,7 +421,7 @@ export default function Home() {
                 <li><a href="#" className="hover:text-white transition">Privacy</a></li>
                 <li><a href="#" className="hover:text-white transition">Terms</a></li>
                 <li><a href="#" className="hover:text-white transition">Security</a></li>
-                <li><a href="mailto:info@deltasync.cloud" className="hover:text-white transition">Contact</a></li>
+                <li><a href="mailto:info@deltasync.simplysoftware.app" className="hover:text-white transition">Contact</a></li>
               </ul>
             </div>
           </div>

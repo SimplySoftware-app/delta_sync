@@ -1,5 +1,7 @@
 # Connecting GoDaddy Domain to Vercel - Step by Step
 
+The landing is served from Hetzner at `deltasync.simplysoftware.app`, not from Vercel. `vercel.json` is still in the repo. This document is the previous GoDaddy-to-Vercel setup.
+
 ## Prerequisites
 - Your project must be deployed on Vercel first
 - You need access to your GoDaddy account
@@ -18,13 +20,13 @@
 
 3. **Add Your Domain**
    - In the "Domains" section, you'll see an input field
-   - Type: `deltasync.cloud`
+   - Type: `deltasync.simplysoftware.app`
    - Press Enter or click "Add"
    - Vercel will show you the DNS records you need to configure
 
 4. **Add WWW Subdomain (Optional but Recommended)**
-   - Also add: `www.deltasync.cloud`
-   - This ensures both `deltasync.cloud` and `www.deltasync.cloud` work
+   - Also add: `www.deltasync.simplysoftware.app`
+   - This ensures both `deltasync.simplysoftware.app` and `www.deltasync.simplysoftware.app` work
 
 5. **Copy the DNS Records**
    - Vercel will display specific DNS records you need to add
@@ -45,7 +47,7 @@
 
 2. **Navigate to DNS Settings**
    - Click on **"My Products"** (top right)
-   - Find **deltasync.cloud** in your domain list
+   - Find **deltasync.simplysoftware.app** in your domain list
    - Click on the **"DNS"** button (or three dots → "Manage DNS")
 
 3. **Edit DNS Records**
@@ -56,7 +58,7 @@
    
    - Find or create an **A record** with:
      - **Type**: `A`
-     - **Name**: `@` (or leave blank, or `deltasync.cloud`)
+     - **Name**: `@` (or leave blank, or `deltasync.simplysoftware.app`)
      - **Value**: The IP address Vercel provided (usually starts with `76.` or `151.`)
      - **TTL**: `600` (or leave default)
    
@@ -100,7 +102,7 @@
 3. **Verify DNS Propagation**
    - Use online tools to check:
      - https://dnschecker.org
-     - Search for `deltasync.cloud` A record
+     - Search for `deltasync.simplysoftware.app` A record
      - Should show Vercel's IP address
 
 ---
@@ -109,7 +111,7 @@
 
 - Vercel **automatically provisions SSL certificates**
 - Once DNS is configured, SSL will be active within minutes
-- Your site will be accessible via `https://deltasync.cloud`
+- Your site will be accessible via `https://deltasync.simplysoftware.app`
 - No additional configuration needed!
 
 ---
@@ -139,9 +141,9 @@
 1. **Check DNS propagation:**
    ```bash
    # In terminal, check DNS:
-   dig deltasync.cloud
+   dig deltasync.simplysoftware.app
    # or
-   nslookup deltasync.cloud
+   nslookup deltasync.simplysoftware.app
    ```
 
 2. **Verify records in GoDaddy:**
@@ -170,7 +172,7 @@
 - [ ] DNS records match exactly what Vercel provided
 - [ ] Waited for DNS propagation (10-30 min)
 - [ ] Domain shows "Valid Configuration" in Vercel
-- [ ] Can access https://deltasync.cloud
+- [ ] Can access https://deltasync.simplysoftware.app
 - [ ] SSL certificate is active (green lock in browser)
 
 ---

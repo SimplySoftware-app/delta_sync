@@ -1,0 +1,50 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  DEPLOY_PATH: /opt/apps/delta_sync
+
+jobs:
+  deploy:
+    name: Deploy landing
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "mkdir -p '${DEPLOY_PATH}' /opt/apps/edge/sites"
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude 'node_modules/' \
+            --exclude '.next/' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'server/data/' \
+            --exclude 'server/target/' \
+            --exclude 'android/.gradle/' \
+            --exclude 'android/**/build/' \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+             cd '${DEPLOY_PATH}'
+             docker compose up -d --build
+             install -m 644 deploy/caddy/deltasync.simplysoftware.app.caddy /opt/apps/edge/sites/deltasync.simplysoftware.app.caddy
+             docker exec edge-caddy caddy reload --config /etc/caddy/Caddyfile"
