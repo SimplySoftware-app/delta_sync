@@ -1,7 +1,7 @@
 # DeltaSync landing behind edge-caddy.
 #
-# edge-caddy and this service share an external Docker network. Caddy proxies
-# by container name. This file publishes no host ports.
+# edge-caddy and this service share the external Docker network edge_sites.
+# Caddy proxies by container name. This file publishes no host ports.
 
 services:
   landing:
@@ -14,9 +14,9 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: "3000"
     networks:
-      - edge
+      - edge_sites
 
 networks:
-  edge:
+  edge_sites:
     external: true
-    name: edge
+    name: edge_sites

@@ -45,6 +45,7 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -euo pipefail
              cd '${DEPLOY_PATH}'
+             # Compose attaches the landing to the external edge_sites network.
              docker compose up -d --build
              install -m 644 deploy/caddy/deltasync.simplysoftware.app.caddy /opt/apps/edge/sites/deltasync.simplysoftware.app.caddy
              docker exec edge-caddy caddy reload --config /etc/caddy/Caddyfile"
