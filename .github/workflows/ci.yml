@@ -10,7 +10,7 @@ jobs:
     name: Server tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.96.0
       - name: Test
         working-directory: server
@@ -20,14 +20,15 @@ jobs:
     name: Android assembleDebug
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      # v3 defaults to `sdkmanager tools`, which Google no longer publishes.
+      # v4 skips that package; pin the SDK pieces assembleDebug actually needs.
+      - uses: android-actions/setup-android@v4
         with:
-          # Default includes the removed "tools" package, which sdkmanager rejects.
           packages: platform-tools platforms;android-36 build-tools;35.0.0
       - name: Assemble debug
         working-directory: android

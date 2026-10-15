@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.github
+.vercel
+.env
+.env.*
+server
+ios
+android
+docs
+coverage
+npm-debug.log*
+*.md

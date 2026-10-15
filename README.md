@@ -59,33 +59,9 @@ npm start
 
 ## Deployment
 
-### Vercel (Recommended)
+Production is the Next.js landing on the Hetzner host, at [deltasync.simplysoftware.app](https://deltasync.simplysoftware.app). A push to `main` runs `.github/workflows/deploy.yml`: it syncs this repo to `/opt/apps/delta_sync`, builds the landing container on the external `edge_sites` network, installs `deploy/caddy/deltasync.simplysoftware.app.caddy` into `/opt/apps/edge/sites`, and reloads `edge-caddy`.
 
-1. Push your code to GitHub
-2. Import project in Vercel
-3. Configure custom domain (deltasync.cloud) in Vercel settings
-4. Deploy
-
-### GoDaddy Domain Configuration
-
-1. Log in to your GoDaddy account
-2. Go to DNS Management for deltasync.cloud
-3. Add the following DNS records:
-
-```
-Type: CNAME
-Name: www
-Value: cname.vercel-dns.com
-TTL: 600
-
-Type: A
-Name: @
-Value: 76.76.21.21
-TTL: 600
-```
-
-4. In Vercel, add deltasync.cloud as a custom domain
-5. Vercel will automatically provision SSL certificate
+`vercel.json` and `.vercelignore` remain from the previous Vercel host. They are not how this landing is served. The old Vercel and GoDaddy notes are in `DEPLOYMENT.md` and `DOMAIN_SETUP.md`.
 
 ## Tech Stack
 
@@ -93,8 +69,8 @@ TTL: 600
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS 4
 - **Icons**: Lucide React
-- **Deployment**: Vercel
-- **Domain**: GoDaddy
+- **Deployment**: Docker on Hetzner, behind edge-caddy
+- **Domain**: deltasync.simplysoftware.app
 
 ## Project Structure
 
@@ -115,7 +91,7 @@ Copyright © 2025 DeltaSync. All rights reserved.
 
 ## Contact
 
-For inquiries, visit [deltasync.cloud](https://deltasync.cloud)
+For inquiries, visit [deltasync.simplysoftware.app](https://deltasync.simplysoftware.app)
 
 ## Capture v1
 

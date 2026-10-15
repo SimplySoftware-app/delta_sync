@@ -1,0 +1,6 @@
+# Installed to /opt/apps/edge/sites and imported by edge-caddy.
+# Upstream is the landing container name on the external edge_sites network.
+
+deltasync.simplysoftware.app {
+	reverse_proxy delta-sync-landing:3000
+}

@@ -1,5 +1,7 @@
 # DeltaSync Deployment Guide
 
+Production for the landing is self-hosted. See the root `Dockerfile`, `docker-compose.yml`, and `.github/workflows/deploy.yml`. `vercel.json` is unchanged and is not used for `deltasync.simplysoftware.app`. The steps below are the previous Vercel setup.
+
 ## Quick Start
 
 The project is ready for deployment! Follow these steps:
@@ -59,20 +61,20 @@ vercel --prod
    - Vercel will auto-detect Next.js settings
    - Click "Deploy"
 
-## 3. Configure Custom Domain (deltasync.cloud)
+## 3. Configure Custom Domain (deltasync.simplysoftware.app)
 
 ### In Vercel:
 
 1. Go to your project in Vercel dashboard
 2. Click "Settings" → "Domains"
-3. Add domain: `deltasync.cloud`
-4. Add domain: `www.deltasync.cloud`
+3. Add domain: `deltasync.simplysoftware.app`
+4. Add domain: `www.deltasync.simplysoftware.app`
 5. Vercel will provide DNS records to configure
 
 ### In GoDaddy:
 
 1. Log in to your GoDaddy account
-2. Go to "My Products" → "DNS" for deltasync.cloud
+2. Go to "My Products" → "DNS" for deltasync.simplysoftware.app
 3. Click "Manage DNS"
 
 4. **Add these DNS records:**
@@ -96,8 +98,8 @@ vercel --prod
 ### Verify SSL Certificate
 
 Vercel automatically provisions SSL certificates. After DNS propagation:
-- Visit https://deltasync.cloud
-- Visit https://www.deltasync.cloud
+- Visit https://deltasync.simplysoftware.app
+- Visit https://www.deltasync.simplysoftware.app
 - Both should work with valid SSL
 
 ## 4. Environment Variables (if needed)
@@ -131,7 +133,7 @@ npm run build
 ```
 
 ### DNS Not Resolving
-- Use `dig deltasync.cloud` to check DNS records
+- Use `dig deltasync.simplysoftware.app` to check DNS records
 - Wait longer for propagation
 - Verify records in GoDaddy match Vercel's requirements
 
