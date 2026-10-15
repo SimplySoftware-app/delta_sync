@@ -26,10 +26,9 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
-      - name: Install SDK packages
-        run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --install "platforms;android-36" "build-tools;35.0.0"
+        with:
+          # Default includes the removed "tools" package, which sdkmanager rejects.
+          packages: platform-tools platforms;android-36 build-tools;35.0.0
       - name: Assemble debug
         working-directory: android
         run: chmod +x gradlew && ./gradlew :app:assembleDebug --stacktrace --no-daemon
