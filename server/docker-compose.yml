@@ -6,7 +6,9 @@
 
 services:
   delta-sync:
-    build: .
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
     image: delta-sync-server:local
     container_name: delta-sync
     restart: unless-stopped

@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = ["server", "crates/core"]
+
+[workspace.package]
+license = "Apache-2.0"

@@ -1,0 +1,21 @@
+# Used when building server/Dockerfile with the repository root as context
+# (BuildKit picks <Dockerfile>.dockerignore over the root .dockerignore, which
+# is written for the landing page and excludes server/).
+.git
+.github
+node_modules
+.next
+target
+server/target
+server/data
+server/.env
+server/.env.*
+.env
+.env.*
+android
+ios
+app
+components
+lib
+public
+docs

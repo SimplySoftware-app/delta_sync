@@ -1,0 +1,36 @@
+[package]
+name = "delta_sync_core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Delta Sync SDK core: sign C2PA capture and edits, then label HM, AI, or Unknown"
+publish = false
+rust-version = "1.96"
+
+[lib]
+name = "delta_sync_core"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+default = ["c2pa", "ffi"]
+c2pa = ["dep:c2pa"]
+ffi = ["dep:uniffi"]
+bindgen = ["ffi", "uniffi/cli"]
+
+[dependencies]
+c2pa = { version = "0.91.2", optional = true, default-features = false, features = ["rust_native_crypto"] }
+ed25519-dalek = { version = "2", features = ["pkcs8"] }
+rcgen = { version = "0.13", features = ["x509-parser"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+time = "0.3"
+uniffi = { version = "0.32.2", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"

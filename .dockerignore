@@ -6,6 +6,11 @@ node_modules
 .env
 .env.*
 server
+crates
+target
+Cargo.toml
+Cargo.lock
+rust-toolchain.toml
 ios
 android
 docs
