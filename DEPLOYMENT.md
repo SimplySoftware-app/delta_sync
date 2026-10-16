@@ -11,7 +11,7 @@ The project is ready for deployment! Follow these steps:
 First, test the site locally to ensure everything works:
 
 ```bash
-cd /Users/carlosedm10/projects/delta_sync
+cd delta_sync
 npm run dev
 ```
 
@@ -33,7 +33,7 @@ vercel login
 
 3. Deploy:
 ```bash
-cd /Users/carlosedm10/projects/delta_sync
+cd delta_sync
 vercel
 ```
 
@@ -46,7 +46,7 @@ vercel --prod
 
 1. **Push to GitHub:**
    ```bash
-   cd /Users/carlosedm10/projects/delta_sync
+   cd delta_sync
    git init
    git add .
    git commit -m "Initial commit: DeltaSync landing page"

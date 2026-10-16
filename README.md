@@ -1,28 +1,20 @@
 # DeltaSync - Authentic Content Protocol
 
-A revolutionary protocol ensuring video authenticity in the age of AI-generated content.
-
-## Overview
-
-DeltaSync is a cryptographic protocol that creates an unbreakable chain of authenticity from device to platform, ensuring every video can be verified as genuine. Built to combat the growing problem of AI-generated fake content flooding social media.
+DeltaSync is open-source media provenance built on C2PA. A Rust signing authority (c2pa-rs) issues short-lived device certificates after App Attest or Play Integrity checks, and runs in stub mode locally without those checks. The iOS and Android capture apps sign JPEGs on the device, and anyone can verify a file with the server's `/verify` endpoint.
 
 ## Features
 
-- **Device Capture Verification**: Videos are cryptographically signed at capture by trusted devices
-- **Unique Fingerprinting**: Each video receives a permanent cryptographic hash
-- **Platform Integration**: Seamless verification across social media platforms
-- **Privacy Protected**: Zero-knowledge verification preserves user privacy
-- **Blockchain-Based**: Unbreakable security through distributed ledger technology
+- **Device Capture Signing**: The iOS and Android apps sign captured JPEGs with a key held in secure hardware
+- **Content Hash in the Manifest**: The C2PA manifest records a hash of the signed asset, so a changed file fails verification
+- **Public Verification**: `POST /verify` reads a C2PA manifest and reports whether it was issued by the DeltaSync CA
 
 ## Core Principles
 
 1. **Small Load** - Minimal processing overhead
-2. **Confidentiality** - Zero-knowledge verification
-3. **Encapsulation** - Permanent cryptographic linking
-4. **Generalized** - Cross-platform implementation
-5. **Master's Approval** - Governed partnership model
-6. **Categorization** - Clear content type definitions
-7. **Unbreakable** - Blockchain-secured protocol
+2. **Encapsulation** - Permanent cryptographic linking
+3. **Generalized** - Cross-platform implementation
+4. **Master's Approval** - Governed partnership model
+5. **Categorization** - Clear content type definitions
 
 ## Getting Started
 
@@ -87,7 +79,7 @@ delta_sync/
 
 ## License
 
-Copyright © 2025 DeltaSync. All rights reserved.
+Apache-2.0 — see LICENSE.
 
 ## Contact
 
