@@ -54,6 +54,7 @@ const PERMITTED: &[&str] = &[
     "c2pa.filtered",
     "c2pa.color_adjustments",
     "c2pa.transcoded",
+    "c2pa.resized",
     "c2pa.published",
 ];
 
@@ -170,7 +171,9 @@ pub fn report_from_store(store: &Value, self_declared_ai: bool) -> CredentialRep
     if let Some(codes) = store.get("validation_status").and_then(Value::as_array) {
         for code in codes {
             if let Some(c) = code.get("code").and_then(Value::as_str) {
-                report.validation_codes.push(c.to_string());
+                if !is_ignorable_code(c) {
+                    report.validation_codes.push(c.to_string());
+                }
             }
         }
     }
@@ -201,7 +204,7 @@ fn walk(value: &Value, report: &mut CredentialReport) {
             // Ingredient validation is nested. A trusted active seal must not
             // hide an untrusted or altered capture further down the chain.
             if let Some(Value::String(code)) = map.get("code") {
-                if !report.validation_codes.contains(code) {
+                if !is_ignorable_code(code) && !report.validation_codes.contains(code) {
                     report.validation_codes.push(code.clone());
                 }
             }
@@ -250,6 +253,14 @@ fn walk(value: &Value, report: &mut CredentialReport) {
         }
         _ => {}
     }
+}
+
+/// An RFC 3161 time-stamp is checked against a TSA trust list, and ours is not
+/// on one (the authority uses a public TSA). The manifest's trust is the chain
+/// to our own root, so an untrusted TSA is informational, not a failure. A
+/// time-stamp that does not match its signature is still a failure.
+fn is_ignorable_code(code: &str) -> bool {
+    code == "timeStamp.untrusted"
 }
 
 fn operation_for(action: &str) -> Option<&'static str> {
@@ -340,6 +351,41 @@ mod tests {
             .validation_codes
             .push("signingCredential.untrusted".into());
         assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    #[test]
+    fn an_untrusted_time_stamp_authority_does_not_block_hm() {
+        let store = json!({
+            "active_manifest": "urn:1",
+            "validation_status": [{"code": "timeStamp.untrusted"}],
+            "manifests": {"urn:1": {
+                "claim_generator": "Delta Sync/0.1.0",
+                "assertions": [{"label": "c2pa.actions", "data": {"actions": [{
+                    "action": "c2pa.created",
+                    "digitalSourceType": DIGITAL_CAPTURE
+                }]}}]
+            }},
+            "validation_results": {"activeManifest": {"informational": [
+                {"code": "timeStamp.untrusted", "explanation": "timestamp cert untrusted"}
+            ]}}
+        });
+        let report = report_from_store(&store, false);
+        assert!(
+            report.validation_codes.is_empty(),
+            "{:?}",
+            report.validation_codes
+        );
+        assert_eq!(assign_label(&report).label, "HM");
+        let mut broken = report.clone();
+        broken.validation_codes.push("timeStamp.mismatch".into());
+        assert_eq!(assign_label(&broken).label, "Unknown");
+    }
+
+    #[test]
+    fn resized_is_a_permitted_action() {
+        let mut report = capture();
+        report.actions.push("c2pa.resized".into());
+        assert_eq!(assign_label(&report).label, "HM");
     }
 
     #[test]

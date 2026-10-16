@@ -14,24 +14,31 @@ pub struct Verification {
     pub detail: Option<String>,
 }
 
+/// C2PA settings that trust only `ca_pem` for manifest signatures. Remote
+/// manifests are never fetched.
+pub fn trust_settings_json(ca_pem: &str) -> String {
+    json!({
+        "verify": {
+            "verify_trust": true,
+            "verify_after_reading": true,
+            "remote_manifest_fetch": false
+        },
+        "trust": {
+            // The verifier only accepts the EKUs it is told about. Ours is
+            // c2pa-kp-claimSigning, which is not in its built-in verify list.
+            "trust_config": crate::ca::CLAIM_SIGNING_EKU_OID,
+            "anchors": [{
+                "trust_anchors": ca_pem,
+                "trust_kind": "manifest"
+            }]
+        }
+    })
+    .to_string()
+}
+
 pub fn verify_bytes(bytes: &[u8], format: &str, ca_pem: &str) -> anyhow::Result<Verification> {
     let settings = Settings::new()
-        .with_json(
-            &json!({
-                "verify": {
-                    "verify_trust": true,
-                    "verify_after_reading": true,
-                    "remote_manifest_fetch": false
-                },
-                "trust": {
-                    "anchors": [{
-                        "trust_anchors": ca_pem,
-                        "trust_kind": "manifest"
-                    }]
-                }
-            })
-            .to_string(),
-        )
+        .with_json(&trust_settings_json(ca_pem))
         .map_err(|err| anyhow!("C2PA settings: {err}"))?;
     let context = Context::new()
         .with_settings(settings)

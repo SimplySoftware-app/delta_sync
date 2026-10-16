@@ -28,9 +28,36 @@ pub struct Config {
     pub allowed_app_ids: Vec<String>,
     pub allowed_android_packages: Vec<String>,
     pub google_credentials_file: Option<PathBuf>,
-    pub ca_cert_path: Option<PathBuf>,
-    pub ca_key_path: Option<PathBuf>,
+    pub pki: PkiPaths,
+    /// RFC 3161 time-stamp authority used when the service signs a derivative.
+    /// `None` disables time-stamping.
+    pub tsa_url: Option<String>,
+    /// Shared secret for `/internal/seal` (Bearer). `None` leaves the route
+    /// answering 503.
+    pub seal_token: Option<String>,
+    /// How many seals may run at once. Each one holds several copies of the
+    /// asset in memory.
+    pub seal_max_concurrency: usize,
 }
+
+/// Optional overrides for the PKI files that otherwise live in `DATA_DIR`.
+/// Use them to provision an offline root and the two ICAs from outside the
+/// service. Either all of the root and ICA paths are set or none are.
+#[derive(Clone, Debug, Default)]
+pub struct PkiPaths {
+    pub root_cert: Option<PathBuf>,
+    pub device_ica_cert: Option<PathBuf>,
+    pub device_ica_key: Option<PathBuf>,
+    pub service_ica_cert: Option<PathBuf>,
+    pub service_ica_key: Option<PathBuf>,
+    pub service_cert: Option<PathBuf>,
+    pub service_key: Option<PathBuf>,
+}
+
+/// Longest life of a device certificate.
+pub const MAX_DEVICE_CERT_TTL_SECONDS: u64 = 86_400;
+pub const DEFAULT_TSA_URL: &str = "http://timestamp.digicert.com";
+pub const MIN_SEAL_TOKEN_LEN: usize = 32;
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
@@ -56,8 +83,8 @@ impl Config {
             .unwrap_or_else(|_| "900".to_string())
             .parse()
             .context("DEVICE_CERT_TTL_SECONDS")?;
-        if !(60..86_400).contains(&ttl_secs) {
-            bail!("DEVICE_CERT_TTL_SECONDS must be between 60 and 86400");
+        if !(60..=MAX_DEVICE_CERT_TTL_SECONDS).contains(&ttl_secs) {
+            bail!("DEVICE_CERT_TTL_SECONDS must be between 60 and {MAX_DEVICE_CERT_TTL_SECONDS} (24 h)");
         }
 
         let allowed_app_ids = split_list("ALLOWED_APP_IDS");
@@ -66,14 +93,39 @@ impl Config {
             .ok()
             .filter(|s| !s.is_empty())
             .map(PathBuf::from);
-        let ca_cert_path = env::var("CA_CERT_PATH")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from);
-        let ca_key_path = env::var("CA_KEY_PATH")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from);
+        let pki = PkiPaths {
+            root_cert: path_var("ROOT_CERT_PATH"),
+            device_ica_cert: path_var("DEVICE_ICA_CERT_PATH"),
+            device_ica_key: path_var("DEVICE_ICA_KEY_PATH"),
+            service_ica_cert: path_var("SERVICE_ICA_CERT_PATH"),
+            service_ica_key: path_var("SERVICE_ICA_KEY_PATH"),
+            service_cert: path_var("SERVICE_CERT_PATH"),
+            service_key: path_var("SERVICE_KEY_PATH"),
+        };
+        // Unset: use the public default. Empty or "off": no time-stamping.
+        let tsa_url = match env::var("TSA_URL") {
+            Err(_) => Some(DEFAULT_TSA_URL.to_string()),
+            Ok(value) => match value.trim() {
+                "" | "off" | "none" => None,
+                url if url.starts_with("http://") || url.starts_with("https://") => {
+                    Some(url.to_string())
+                }
+                other => bail!("TSA_URL must be an http(s) URL, empty or off, got {other}"),
+            },
+        };
+        let seal_token = env::var("MEDIA_SEAL_TOKEN").ok().filter(|s| !s.is_empty());
+        if let Some(token) = &seal_token {
+            if token.len() < MIN_SEAL_TOKEN_LEN {
+                bail!("MEDIA_SEAL_TOKEN must be at least {MIN_SEAL_TOKEN_LEN} characters");
+            }
+        }
+        let seal_max_concurrency: usize = env::var("SEAL_MAX_CONCURRENCY")
+            .unwrap_or_else(|_| "2".to_string())
+            .parse()
+            .context("SEAL_MAX_CONCURRENCY")?;
+        if seal_max_concurrency == 0 {
+            bail!("SEAL_MAX_CONCURRENCY must be at least 1");
+        }
 
         if attestation_mode == AttestationMode::Live {
             if allowed_app_ids.is_empty() {
@@ -101,12 +153,15 @@ impl Config {
             allowed_app_ids,
             allowed_android_packages,
             google_credentials_file,
-            ca_cert_path,
-            ca_key_path,
+            pki,
+            tsa_url,
+            seal_token,
+            seal_max_concurrency,
         })
     }
 
-    /// Test helper. Live checks are off and the CA lives in `data_dir`.
+    /// Test helper. Live checks are off, the PKI lives in `data_dir`, there is no
+    /// time-stamp authority (tests never use the network) and no seal token.
     pub fn for_test(data_dir: PathBuf) -> Self {
         Self {
             listen_addr: "0.0.0.0:0".into(),
@@ -116,8 +171,10 @@ impl Config {
             allowed_app_ids: vec!["TESTTEAM.cloud.deltasync.capture".into()],
             allowed_android_packages: vec!["cloud.deltasync.capture".into()],
             google_credentials_file: None,
-            ca_cert_path: None,
-            ca_key_path: None,
+            pki: PkiPaths::default(),
+            tsa_url: None,
+            seal_token: None,
+            seal_max_concurrency: 2,
         }
     }
 }
@@ -125,6 +182,13 @@ impl Config {
 pub fn read_to_string_private(path: &std::path::Path) -> anyhow::Result<String> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     Ok(text)
+}
+
+fn path_var(key: &str) -> Option<PathBuf> {
+    env::var(key)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
 }
 
 fn split_list(key: &str) -> Vec<String> {
