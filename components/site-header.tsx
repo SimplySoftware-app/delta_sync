@@ -105,11 +105,13 @@ function LanguageSwitcher({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
-          className="size-11"
+          className="h-11 gap-1.5 px-3"
           aria-label={copy.language}
         >
           <Languages />
+          <span aria-hidden="true" className="text-xs font-medium uppercase">
+            {locale}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

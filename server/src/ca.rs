@@ -54,8 +54,8 @@ const SERVICE_CERT_DAYS: i64 = 365;
 const SERVICE_RENEW_BEFORE_DAYS: i64 = 30;
 
 const ROOT_CN: &str = "Delta Sync Root CA";
-const DEVICE_ICA_CN: &str = "Delta Sync Device ICA";
-const SERVICE_ICA_CN: &str = "Delta Sync Service ICA";
+// The label rules in the core read a manifest's role from these names.
+use delta_sync_core::{DEVICE_ICA_CN, SERVICE_ICA_CN};
 const ORG: &str = "Delta Sync";
 /// Subject organisation of device leaves. C2PA reports it as the signature issuer.
 pub const DEVICE_LEAF_ORG: &str = "Delta Sync Device";

@@ -28,7 +28,8 @@ enum Csr {
             info as CFData,
             &error
         ) as Data? else {
-            throw CsrError.signature((error?.takeRetainedValue() as Error? as NSError?)?.code ?? errSecParam)
+            let code = (error?.takeRetainedValue() as Error? as NSError?)?.code
+            throw CsrError.signature(code.map { OSStatus(truncatingIfNeeded: $0) } ?? errSecParam)
         }
         let algorithm = derSequence([
             derOid([0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02])

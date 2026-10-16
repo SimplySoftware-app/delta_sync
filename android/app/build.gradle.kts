@@ -62,16 +62,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.play.integrity)
-    implementation(libs.c2pa) {
-        exclude(group = "net.java.dev.jna", module = "jna")
-    }
-    implementation("net.java.dev.jna:jna:5.17.0") {
-        isTransitive = false
-        artifact {
-            type = "aar"
-            extension = "aar"
-        }
-    }
+    // Delta Sync core (Rust, via UniFFI) and the Keystore DeviceSigner.
+    implementation(project(":sdk"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.1")
 }

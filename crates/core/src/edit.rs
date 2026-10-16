@@ -27,7 +27,21 @@ pub enum Edit {
     Filter {
         name: String,
     },
+    /// The audio track was removed. Recorded as `c2pa.edited` with the
+    /// description [`AUDIO_REMOVED`], which the label rules know.
+    Mute,
+    /// A frame of the video was picked as its poster. Recorded as
+    /// `c2pa.edited` with the description [`COVER_SELECTED`]. The poster image
+    /// is sealed as its own derivative of the video.
+    Cover {
+        at_ms: u64,
+    },
 }
+
+/// Description of the `c2pa.edited` action that records a mute.
+pub const AUDIO_REMOVED: &str = "audio removed";
+/// Description of the `c2pa.edited` action that records a cover frame.
+pub const COVER_SELECTED: &str = "cover frame selected";
 
 impl Edit {
     pub fn action(&self) -> &'static str {
@@ -37,7 +51,27 @@ impl Edit {
             Edit::Rotate { .. } => "c2pa.orientation",
             Edit::Text { .. } => "c2pa.drawing",
             Edit::Filter { .. } => "c2pa.filtered",
+            Edit::Mute | Edit::Cover { .. } => "c2pa.edited",
         }
+    }
+
+    /// The `description` of the action, for the actions that need one to be
+    /// understood (`c2pa.edited` is too generic to be permitted on its own).
+    pub fn description(&self) -> Option<&'static str> {
+        match self {
+            Edit::Mute => Some(AUDIO_REMOVED),
+            Edit::Cover { .. } => Some(COVER_SELECTED),
+            _ => None,
+        }
+    }
+
+    /// The action as it is written in the manifest.
+    pub fn action_json(&self) -> Value {
+        let mut action = json!({ "action": self.action(), "parameters": self.parameters() });
+        if let Some(description) = self.description() {
+            action["description"] = json!(description);
+        }
+        action
     }
 
     pub fn operation(&self) -> &'static str {
@@ -47,6 +81,8 @@ impl Edit {
             Edit::Rotate { .. } => "rotate",
             Edit::Text { .. } => "text",
             Edit::Filter { .. } => "filter",
+            Edit::Mute => "mute",
+            Edit::Cover { .. } => "cover",
         }
     }
 
@@ -62,6 +98,8 @@ impl Edit {
             Edit::Rotate { degrees } => json!({ "degrees": degrees }),
             Edit::Text { body } => json!({ "body": body }),
             Edit::Filter { name } => json!({ "name": name }),
+            Edit::Mute => json!({}),
+            Edit::Cover { at_ms } => json!({ "at_ms": at_ms }),
         }
     }
 
@@ -104,6 +142,32 @@ mod tests {
         };
         assert_eq!(edit.action(), "c2pa.cropped");
         assert!(edit.validate().is_ok());
+    }
+
+    #[test]
+    fn mute_and_cover_are_recorded_as_described_edits() {
+        let mute = Edit::Mute;
+        assert_eq!(mute.action(), "c2pa.edited");
+        assert_eq!(mute.operation(), "mute");
+        assert_eq!(mute.action_json()["description"], AUDIO_REMOVED);
+        let cover = Edit::Cover { at_ms: 1500 };
+        assert_eq!(cover.action(), "c2pa.edited");
+        assert_eq!(cover.operation(), "cover");
+        assert_eq!(cover.action_json()["description"], COVER_SELECTED);
+        assert_eq!(cover.action_json()["parameters"]["at_ms"], 1500);
+        let parsed: Edit = serde_json::from_str(r#"{"op":"mute"}"#).unwrap();
+        assert_eq!(parsed, Edit::Mute);
+        let parsed: Edit = serde_json::from_str(r#"{"op":"cover","at_ms":9}"#).unwrap();
+        assert_eq!(parsed, Edit::Cover { at_ms: 9 });
+        assert!(Edit::Crop {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1
+        }
+        .action_json()
+        .get("description")
+        .is_none());
     }
 
     #[test]

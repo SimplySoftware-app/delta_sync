@@ -27,10 +27,10 @@ Challenges live in the memory of one process for five minutes and are single-use
 - C2PA manifest creation and validation, including the asset hash, the ES256 signature, and trust of the DeltaSync CA. The server test signs a JPEG with an issued device certificate and `/verify` returns `Trusted`. A changed scan byte no longer validates.
 - PKCS#10 proof of possession. A certificate is not issued for a key the caller cannot sign with, including in stub mode.
 - Short-lived X.509 device certificates with the C2PA end-entity profile (version 3, digitalSignature, emailProtection, authority key identifier).
-- iOS Secure Enclave key creation and signing through `c2pa-swift` 0.0.14 (`Signer` + `SecureEnclaveSignerConfig`). The private key is not exported.
+- iOS Secure Enclave key creation and signing through `SecureEnclaveDeviceSigner` (`sdk/swift`), which the Rust core calls over UniFFI to sign the C2PA claim. The private key is not exported.
 - App Attest on a physical iPhone: `DCAppAttestService.generateKey` and `attestKey`.
 - Live App Attest checking on the server: CBOR attestation, x5c chain to the public Apple App Attestation Root CA, the nonce over `authData || clientDataHash`, `rpIdHash` against the app id, counter 0, the development or production AAGUID, and the credential id. A fixture chain that does not end at Apple's root is rejected. That root certificate is public and is the only PEM committed under `server/certs/`.
-- Android StrongBox / Keystore key creation, hardware CSR signing, and C2PA signing through `c2pa-android` 0.0.14 (`StrongBoxSigner` or `KeyStoreSigner`).
+- Android StrongBox / Keystore key creation, hardware CSR signing, and C2PA signing through `KeystoreDeviceSigner` (`sdk/kotlin`), which the Rust core calls over UniFFI to sign the C2PA claim.
 - Live Play Integrity checking: a Google service-account JWT, `decodeIntegrityToken`, then the nonce, package name, `PLAY_RECOGNIZED`, and `MEETS_DEVICE_INTEGRITY`.
 
 ## What is stubbed
