@@ -25,6 +25,14 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// What verification trusts: our root and, when configured, the time-stamp
+    /// authorities allowed to date a signature.
+    pub fn verify_options(&self) -> delta_sync_core::VerifyOptions {
+        let mut options = delta_sync_core::VerifyOptions::new(self.ca.root_pem());
+        options.tsa_anchors_pem = self.config.tsa_trust_anchors.clone();
+        options
+    }
+
     pub fn new(config: Config) -> anyhow::Result<Self> {
         let ca = CertificateAuthority::load_or_create(&config.data_dir, &config.pki)?;
         let seal_permits = Semaphore::new(config.seal_max_concurrency);

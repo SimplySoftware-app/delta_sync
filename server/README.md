@@ -45,10 +45,12 @@ Multipart fields:
 
 - `original`: the device-signed asset (`image/jpeg|png|webp`, `video/mp4|quicktime`, 32 MiB at most)
 - `rendered`: the bytes the processor rendered from it
-- `edits` (optional): JSON array such as `[{"op":"crop","x":0,"y":0,"width":800,"height":600},{"op":"text","body":"hi"}]` (8 at most)
+- `edits` (optional): JSON array such as `[{"op":"crop","x":0,"y":0,"width":800,"height":600},{"op":"text","body":"hi"}]` (8 at most). Ops: `crop`, `trim`, `rotate`, `text`, `filter`, `mute` (recorded as `c2pa.edited`, "audio removed") and `cover` (`{"op":"cover","at_ms":1500}`, `c2pa.edited`, "cover frame selected")
 - `resized` (optional): `true` when the rendered asset has fewer pixels
 
 Header `x-self-declared-ai: true` marks the derivative as AI.
+
+A video poster is sealed as its own derivative: send the device-signed video as `original`, the poster image as `rendered` (`image/jpeg`) and `[{"op":"cover","at_ms":N}]`. The poster's `parentOf` ingredient is the video. MP4 and MOV are hashed with `c2pa.hash.bmff` v3 and a Merkle tree over 1024 KB chunks of the media payload.
 
 The answer is `rendered` with a new manifest signed by the service certificate: the edit actions, `c2pa.transcoded` (and `c2pa.resized`), and `original` as its `parentOf` ingredient. The service refuses with 422 unless `original` verifies as an HM capture signed under the Device ICA. An unsigned file, a capture from another authority, or a file the service sealed itself is refused, so a seal never turns something into HM. 502 means the time-stamp authority was unreachable.
 
@@ -56,7 +58,9 @@ At most `SEAL_MAX_CONCURRENCY` (default 2) seals run at once. The 32 MiB cap sta
 
 ## Time-stamps
 
-`TSA_URL` is an RFC 3161 authority used for service seals. Unset it is `http://timestamp.digicert.com`. Set it empty or `off` to turn it off. It is on by default, so the service needs outbound HTTP; if the authority is down, sealing fails with 502 instead of producing a seal without a time-stamp. The authority is not on a trust list, so its response is informational (`timeStamp.untrusted`) and does not change a label. Tests never use the network. Time-stamps on device signatures, which keep a capture valid after its 24 h certificate expires, need the device-side signing work and are not in place yet.
+`TSA_URL` is an RFC 3161 authority used for service seals. Unset it is `http://timestamp.digicert.com`. Set it empty or `off` to turn it off. It is on by default, so the service needs outbound HTTP; if the authority is down, sealing fails with 502 instead of producing a seal without a time-stamp. Tests never use the network.
+
+`TSA_TRUST_ANCHORS_PATH` is a PEM file with the root certificates of the time-stamp authorities that verification trusts to date a signature (for DigiCert, its timestamping root chain). With it, a capture signed while its short-lived device certificate was valid, and time-stamped by one of those authorities, still verifies after the certificate expires. Without it a time stamp from an unknown authority proves nothing, is reported as `timeStamp.untrusted` (informational), and an expired device certificate makes the label Unknown. The device asks its own time-stamp authority (`sign_capture_file_with_timestamp` in the core: the platform makes the HTTP request).
 
 ## Verify a photo
 

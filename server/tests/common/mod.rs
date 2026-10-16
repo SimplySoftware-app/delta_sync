@@ -328,3 +328,31 @@ pub async fn upload(
             .unwrap_or(Value::String(String::from_utf8_lossy(&bytes).into())),
     )
 }
+
+/// An enrolled device as a `DeviceSigner`, for the core's file-signing API.
+pub struct EnrolledSigner {
+    pub key: SigningKey,
+    pub chain: String,
+}
+
+impl delta_sync_core::DeviceSigner for EnrolledSigner {
+    fn alg(&self) -> delta_sync_core::SignerAlg {
+        delta_sync_core::SignerAlg::Es256
+    }
+
+    fn cert_chain(&self) -> Result<String, delta_sync_core::CoreError> {
+        Ok(self.chain.clone())
+    }
+
+    fn sign(&self, data: Vec<u8>) -> Result<Vec<u8>, delta_sync_core::CoreError> {
+        let signature: Signature = self.key.sign(&data);
+        Ok(signature.to_bytes().to_vec())
+    }
+}
+
+/// A fixture of the core crate (small, synthetic media made with ffmpeg).
+pub fn core_fixture(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../crates/core/tests/fixtures")
+        .join(name)
+}

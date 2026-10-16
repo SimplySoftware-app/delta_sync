@@ -32,6 +32,11 @@ pub struct Config {
     /// RFC 3161 time-stamp authority used when the service signs a derivative.
     /// `None` disables time-stamping.
     pub tsa_url: Option<String>,
+    /// PEM roots of the time-stamp authorities that verification trusts to date
+    /// a signature (`TSA_TRUST_ANCHORS_PATH`). Without them a device capture is
+    /// valid only while its short-lived certificate is, because a time stamp
+    /// from an authority the verifier does not know proves nothing.
+    pub tsa_trust_anchors: Option<String>,
     /// Shared secret for `/internal/seal` (Bearer). `None` leaves the route
     /// answering 503.
     pub seal_token: Option<String>,
@@ -113,6 +118,16 @@ impl Config {
                 other => bail!("TSA_URL must be an http(s) URL, empty or off, got {other}"),
             },
         };
+        let tsa_trust_anchors = match path_var("TSA_TRUST_ANCHORS_PATH") {
+            Some(path) => {
+                let pem = read_to_string_private(&path)?;
+                if !pem.contains("BEGIN CERTIFICATE") {
+                    bail!("TSA_TRUST_ANCHORS_PATH must hold PEM certificates");
+                }
+                Some(pem)
+            }
+            None => None,
+        };
         let seal_token = env::var("MEDIA_SEAL_TOKEN").ok().filter(|s| !s.is_empty());
         if let Some(token) = &seal_token {
             if token.len() < MIN_SEAL_TOKEN_LEN {
@@ -155,6 +170,7 @@ impl Config {
             google_credentials_file,
             pki,
             tsa_url,
+            tsa_trust_anchors,
             seal_token,
             seal_max_concurrency,
         })
@@ -173,6 +189,7 @@ impl Config {
             google_credentials_file: None,
             pki: PkiPaths::default(),
             tsa_url: None,
+            tsa_trust_anchors: None,
             seal_token: None,
             seal_max_concurrency: 2,
         }

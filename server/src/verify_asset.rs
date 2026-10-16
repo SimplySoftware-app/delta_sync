@@ -17,6 +17,15 @@ pub struct Verification {
 /// C2PA settings that trust only `ca_pem` for manifest signatures. Remote
 /// manifests are never fetched.
 pub fn trust_settings_json(ca_pem: &str) -> String {
+    trust_settings_json_with(ca_pem, None)
+}
+
+/// [`trust_settings_json`] that also trusts `tsa_anchors_pem` to date signatures.
+pub fn trust_settings_json_with(ca_pem: &str, tsa_anchors_pem: Option<&str>) -> String {
+    let mut anchors = vec![json!({ "trust_anchors": ca_pem, "trust_kind": "manifest" })];
+    if let Some(tsa) = tsa_anchors_pem {
+        anchors.push(json!({ "trust_anchors": tsa, "trust_kind": "tsa" }));
+    }
     json!({
         "verify": {
             "verify_trust": true,
@@ -27,18 +36,24 @@ pub fn trust_settings_json(ca_pem: &str) -> String {
             // The verifier only accepts the EKUs it is told about. Ours is
             // c2pa-kp-claimSigning, which is not in its built-in verify list.
             "trust_config": crate::ca::CLAIM_SIGNING_EKU_OID,
-            "anchors": [{
-                "trust_anchors": ca_pem,
-                "trust_kind": "manifest"
-            }]
+            "anchors": anchors
         }
     })
     .to_string()
 }
 
 pub fn verify_bytes(bytes: &[u8], format: &str, ca_pem: &str) -> anyhow::Result<Verification> {
+    verify_bytes_with(bytes, format, ca_pem, None)
+}
+
+pub fn verify_bytes_with(
+    bytes: &[u8],
+    format: &str,
+    ca_pem: &str,
+    tsa_anchors_pem: Option<&str>,
+) -> anyhow::Result<Verification> {
     let settings = Settings::new()
-        .with_json(&trust_settings_json(ca_pem))
+        .with_json(&trust_settings_json_with(ca_pem, tsa_anchors_pem))
         .map_err(|err| anyhow!("C2PA settings: {err}"))?;
     let context = Context::new()
         .with_settings(settings)
@@ -105,13 +120,19 @@ pub fn sniff_format(bytes: &[u8], filename: &str) -> Option<&'static str> {
         return Some("image/webp");
     }
     if bytes.len() > 12 && &bytes[4..8] == b"ftyp" {
-        return Some("video/mp4");
+        // The `qt  ` brand marks a QuickTime movie.
+        return Some(if &bytes[8..12] == b"qt  " {
+            "video/quicktime"
+        } else {
+            "video/mp4"
+        });
     }
     match filename.rsplit('.').next().map(str::to_ascii_lowercase) {
         Some(ref ext) if ext == "jpg" || ext == "jpeg" => Some("image/jpeg"),
         Some(ref ext) if ext == "png" => Some("image/png"),
         Some(ref ext) if ext == "webp" => Some("image/webp"),
-        Some(ref ext) if ext == "mp4" || ext == "mov" => Some("video/mp4"),
+        Some(ref ext) if ext == "mp4" => Some("video/mp4"),
+        Some(ref ext) if ext == "mov" => Some("video/quicktime"),
         _ => None,
     }
 }
