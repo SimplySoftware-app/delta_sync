@@ -27,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function Page() {
   const locale = await getLocale()
-  const { about } = getCopy(locale)
+  const { about, chrome } = getCopy(locale)
 
-  return <AboutPage copy={about} />
+  return <AboutPage copy={about} chrome={chrome} />
 }
