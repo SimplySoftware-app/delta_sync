@@ -62,6 +62,17 @@ At most `SEAL_MAX_CONCURRENCY` (default 2) seals run at once. The 32 MiB cap sta
 
 `TSA_TRUST_ANCHORS_PATH` is a PEM file with the root certificates of the time-stamp authorities that verification trusts to date a signature (for DigiCert, its timestamping root chain). With it, a capture signed while its short-lived device certificate was valid, and time-stamped by one of those authorities, still verifies after the certificate expires. Without it a time stamp from an unknown authority proves nothing, is reported as `timeStamp.untrusted` (informational), and an expired device certificate makes the label Unknown. The device asks its own time-stamp authority (`sign_capture_file_with_timestamp` in the core: the platform makes the HTTP request).
 
+## Verify a photo
+
+`POST /verify` checks a photo's C2PA manifest and returns JSON with `manifest_found`, `validation_state`, the manifest and the validation results. If a single byte changed after signing, validation fails.
+
+```bash
+curl -F "file=@photo.jpg" https://<your-server>/verify
+# locally: curl -F "file=@photo.jpg" http://localhost:8080/verify
+```
+
+Use this endpoint rather than a generic Content Credentials viewer such as contentcredentials.org/verify: those viewers trust the public C2PA list, and DeltaSync signs with its own certificate authority (`ca.crt.pem`), so they will not show it as trusted.
+
 ## Hetzner and Caddy
 
 ```bash
