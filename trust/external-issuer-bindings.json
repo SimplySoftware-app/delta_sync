@@ -1,0 +1,65 @@
+{
+  "comment": "Vinculos producto -> emisor que no se pueden derivar del TEName de C2PA-TRUST-LIST.json. Mantenido a mano, revisado en PR. Ver docs/external-cameras.md. issuers son TEName exactos de trust/c2pa/C2PA-TRUST-LIST.json.",
+  "products": [
+    {
+      "O": "EZDRM, INC",
+      "CN": "DynamicSigner",
+      "issuers": [
+        "DigiCert, Inc.",
+        "SSL Corporation",
+        "TrustAsia Technologies, Inc."
+      ],
+      "reason": "El solicitante no tiene ancla propia en la C2PA Trust List (ningun TEName coincide con O ni con applicant), y no hay fuente publica que diga que CA emite su certificado. Se limita a las CAs comerciales auditadas (WebTrust/CA-B Forum) que venden certificados C2PA a terceros y validan la organizacion del sujeto. Si el producto firma con otra CA, sus capturas quedan Unknown hasta anadir aqui el emisor con evidencia."
+    },
+    {
+      "O": "Evergreen Labs",
+      "CN": "GreenCheckmark - Android",
+      "issuers": [
+        "DigiCert, Inc.",
+        "SSL Corporation",
+        "TrustAsia Technologies, Inc."
+      ],
+      "reason": "El solicitante no tiene ancla propia en la C2PA Trust List (ningun TEName coincide con O ni con applicant), y no hay fuente publica que diga que CA emite su certificado. Se limita a las CAs comerciales auditadas (WebTrust/CA-B Forum) que venden certificados C2PA a terceros y validan la organizacion del sujeto. Si el producto firma con otra CA, sus capturas quedan Unknown hasta anadir aqui el emisor con evidencia."
+    },
+    {
+      "O": "Nuevo.Studio LLC",
+      "CN": "VWFNDR MBL Android",
+      "issuers": [
+        "DigiCert, Inc.",
+        "SSL Corporation",
+        "TrustAsia Technologies, Inc."
+      ],
+      "reason": "El solicitante no tiene ancla propia en la C2PA Trust List (ningun TEName coincide con O ni con applicant), y no hay fuente publica que diga que CA emite su certificado. Se limita a las CAs comerciales auditadas (WebTrust/CA-B Forum) que venden certificados C2PA a terceros y validan la organizacion del sujeto. Si el producto firma con otra CA, sus capturas quedan Unknown hasta anadir aqui el emisor con evidencia."
+    },
+    {
+      "O": "Qualcomm Technologies, Inc.",
+      "CN": "Snapdragon 8 Elite Gen 5",
+      "issuers": [
+        "DigiCert, Inc.",
+        "SSL Corporation",
+        "TrustAsia Technologies, Inc."
+      ],
+      "reason": "El solicitante no tiene ancla propia en la C2PA Trust List (ningun TEName coincide con O ni con applicant), y no hay fuente publica que diga que CA emite su certificado. Se limita a las CAs comerciales auditadas (WebTrust/CA-B Forum) que venden certificados C2PA a terceros y validan la organizacion del sujeto. Si el producto firma con otra CA, sus capturas quedan Unknown hasta anadir aqui el emisor con evidencia."
+    },
+    {
+      "O": "Rheely Inc.",
+      "CN": "Rheely for Android",
+      "issuers": [
+        "DigiCert, Inc.",
+        "SSL Corporation",
+        "TrustAsia Technologies, Inc."
+      ],
+      "reason": "El solicitante no tiene ancla propia en la C2PA Trust List (ningun TEName coincide con O ni con applicant), y no hay fuente publica que diga que CA emite su certificado. Se limita a las CAs comerciales auditadas (WebTrust/CA-B Forum) que venden certificados C2PA a terceros y validan la organizacion del sujeto. Si el producto firma con otra CA, sus capturas quedan Unknown hasta anadir aqui el emisor con evidencia."
+    },
+    {
+      "O": "UX Vision LLC",
+      "CN": "Stroma",
+      "issuers": [
+        "DigiCert, Inc.",
+        "SSL Corporation",
+        "TrustAsia Technologies, Inc."
+      ],
+      "reason": "El solicitante no tiene ancla propia en la C2PA Trust List (ningun TEName coincide con O ni con applicant), y no hay fuente publica que diga que CA emite su certificado. Se limita a las CAs comerciales auditadas (WebTrust/CA-B Forum) que venden certificados C2PA a terceros y validan la organizacion del sujeto. Si el producto firma con otra CA, sus capturas quedan Unknown hasta anadir aqui el emisor con evidencia."
+    }
+  ]
+}

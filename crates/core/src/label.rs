@@ -33,6 +33,11 @@ pub enum SignerRole {
     Device,
     /// The chain goes through the Service ICA: a seal of processing.
     Service,
+    /// A third-party camera whose capture origin the official C2PA lists
+    /// accept (`external_trust`). Only [`external_manifest_record`] assigns
+    /// it from the native path, always with [`ManifestRecord::external`]
+    /// set; without it the manifest is treated as not ours.
+    External,
     /// Anything else. Never part of an HM.
     #[default]
     Unknown,
@@ -43,6 +48,7 @@ impl SignerRole {
         match self {
             SignerRole::Device => "device",
             SignerRole::Service => "service",
+            SignerRole::External => "external",
             SignerRole::Unknown => "unknown",
         }
     }
@@ -65,6 +71,18 @@ pub struct ManifestRecord {
     pub id: String,
     pub role: SignerRole,
     pub actions: Vec<ActionRecord>,
+    /// The accepted external camera, for [`SignerRole::External`] only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<ExternalOrigin>,
+}
+
+/// The conformance product an external capture was accepted as.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalOrigin {
+    pub organization: String,
+    pub product: String,
+    /// `TEName` of the Trust List entity that issued the signer.
+    pub issuer: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -162,12 +180,31 @@ pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
     // else is. Processing (edits, transcoding, sealing) is signed under the
     // Service ICA and it never claims a capture. A manifest signed by anyone
     // else, ingredients included, keeps the whole chain out of HM.
+    //
+    // Rule 6 for external cameras: a manifest accepted by `external_trust`
+    // may stand in for the device capture. Its own further actions, and every
+    // later manifest, must be permitted actions sealed by our Service ICA.
+    // Our devices never sign over it and there is only one capture origin.
     if report.manifests.is_empty() {
         reasons.push("signer_not_identified".into());
     }
     for manifest in &report.manifests {
         match manifest.role {
             SignerRole::Unknown => push_once(&mut reasons, "signer_not_ours"),
+            SignerRole::External if manifest.external.is_none() => {
+                push_once(&mut reasons, "signer_not_ours")
+            }
+            SignerRole::External => {
+                for action in &manifest.actions {
+                    if action.action == "c2pa.created" {
+                        if !is_capture(action) {
+                            push_once(&mut reasons, "not_digital_capture");
+                        }
+                    } else if !service_may_sign(action) {
+                        push_once(&mut reasons, "disallowed_action");
+                    }
+                }
+            }
             SignerRole::Device => {
                 for action in &manifest.actions {
                     if action.action == "c2pa.created" {
@@ -190,12 +227,32 @@ pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
             }
         }
     }
-    let device_capture = report
+    let device_captures = report
         .manifests
         .iter()
-        .any(|m| m.role == SignerRole::Device && m.actions.iter().any(is_capture));
-    if !device_capture {
-        push_once(&mut reasons, "no_device_capture");
+        .filter(|m| m.role == SignerRole::Device && m.actions.iter().any(is_capture))
+        .count();
+    let external_captures: Vec<&ExternalOrigin> = report
+        .manifests
+        .iter()
+        .filter(|m| m.role == SignerRole::External && m.actions.iter().any(is_capture))
+        .filter_map(|m| m.external.as_ref())
+        .collect();
+    if external_captures.is_empty() {
+        if device_captures == 0 {
+            push_once(&mut reasons, "no_device_capture");
+        }
+    } else {
+        if external_captures.len() + device_captures > 1 {
+            push_once(&mut reasons, "multiple_capture_origins");
+        }
+        if report
+            .manifests
+            .iter()
+            .any(|m| m.role == SignerRole::Device)
+        {
+            push_once(&mut reasons, "device_over_external");
+        }
     }
 
     let rules_ok = !hard_fail && reasons.is_empty();
@@ -206,12 +263,20 @@ pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
             .filter(|op| !op.is_empty() && *op != "capture")
             .map(String::as_str)
             .collect();
-        let summary = if edits.is_empty() {
-            "HM · captured".to_string()
-        } else {
-            format!("HM · captured, then edited: {}", edits.join(", "))
+        let captured = match external_captures.first() {
+            Some(origin) => format!("captured with {} ({})", origin.product, origin.organization),
+            None => "captured".to_string(),
         };
-        reasons.push("delta_sync_capture".into());
+        let summary = if edits.is_empty() {
+            format!("HM · {captured}")
+        } else {
+            format!("HM · {captured}, then edited: {}", edits.join(", "))
+        };
+        reasons.push(if external_captures.is_empty() {
+            "delta_sync_capture".into()
+        } else {
+            "external_capture".into()
+        });
         return verdict(Label::Hm, summary, reasons, report);
     }
 
@@ -286,8 +351,13 @@ pub fn report_from_store_with_roles(
         for id in ids {
             report.manifests.push(ManifestRecord {
                 id: id.clone(),
-                role: roles.get(id).copied().unwrap_or_default(),
+                // External needs a verdict; a role map cannot grant it.
+                role: match roles.get(id).copied().unwrap_or_default() {
+                    SignerRole::External => SignerRole::Unknown,
+                    role => role,
+                },
                 actions: actions_of(&manifests[id]),
+                external: None,
             });
         }
     }
@@ -435,6 +505,60 @@ fn operation_for(action: &str, description: &str) -> Option<&'static str> {
     }
 }
 
+/// The record of a manifest signed by a third-party camera, judged by the
+/// official C2PA lists ([`crate::external_trust::external_capture_verdict`],
+/// rules 1-5). An accepted capture origin gets [`SignerRole::External`];
+/// anything else is [`SignerRole::Unknown`] and keeps the chain out of HM.
+/// [`assign_label`] then applies rule 6 to whatever was signed after it.
+///
+/// Same contract as the verdict: `info` must come from a manifest c2pa-rs
+/// has already validated, and its MIME from the asset bytes.
+#[cfg(feature = "c2pa")]
+pub fn external_manifest_record(
+    id: &str,
+    info: &crate::external_trust::ExternalManifestInfo,
+) -> ManifestRecord {
+    external_record_from(
+        id,
+        info,
+        crate::external_trust::external_capture_verdict(info),
+    )
+}
+
+#[cfg(feature = "c2pa")]
+pub(crate) fn external_record_from(
+    id: &str,
+    info: &crate::external_trust::ExternalManifestInfo,
+    verdict: crate::external_trust::ExternalVerdict,
+) -> ManifestRecord {
+    use crate::external_trust::ExternalVerdict;
+    let (role, external) = match verdict {
+        ExternalVerdict::Hm { product } => (
+            SignerRole::External,
+            Some(ExternalOrigin {
+                organization: product.organization,
+                product: product.common_name,
+                issuer: product.issuer,
+            }),
+        ),
+        ExternalVerdict::Unknown { .. } => (SignerRole::Unknown, None),
+    };
+    ManifestRecord {
+        id: id.to_string(),
+        role,
+        actions: info
+            .actions
+            .iter()
+            .map(|a| ActionRecord {
+                action: a.action.clone(),
+                description: String::new(),
+                source: a.digital_source_type.clone().unwrap_or_default(),
+            })
+            .collect(),
+        external,
+    }
+}
+
 #[allow(dead_code)]
 pub fn empty_report() -> CredentialReport {
     CredentialReport::default()
@@ -472,6 +596,7 @@ mod tests {
             id: format!("urn:{}", role.as_str()),
             role,
             actions,
+            external: None,
         }
     }
 
@@ -721,6 +846,211 @@ mod tests {
             .validation_codes
             .push("signingCredential.untrusted".into());
         assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    // Rule 6: external cameras.
+
+    fn origin() -> ExternalOrigin {
+        ExternalOrigin {
+            organization: "Google LLC".into(),
+            product: "Pixel Camera".into(),
+            issuer: "Google LLC".into(),
+        }
+    }
+
+    fn external(actions: Vec<ActionRecord>) -> ManifestRecord {
+        ManifestRecord {
+            external: Some(origin()),
+            ..manifest(SignerRole::External, actions)
+        }
+    }
+
+    #[test]
+    fn an_accepted_external_capture_is_hm() {
+        let verdict = assign_label(&report(vec![external(vec![created()])]));
+        assert_eq!(verdict.label, "HM", "{verdict:?}");
+        assert_eq!(
+            verdict.summary,
+            "HM · captured with Pixel Camera (Google LLC)"
+        );
+        assert_eq!(verdict.reasons, vec!["external_capture"]);
+        assert_eq!(verdict.signers, vec!["external"]);
+    }
+
+    #[test]
+    fn our_service_seal_over_an_external_capture_stays_hm() {
+        let report = report(vec![
+            manifest(
+                SignerRole::Service,
+                vec![
+                    action("c2pa.opened"),
+                    action("c2pa.cropped"),
+                    described("c2pa.edited", AUDIO_REMOVED),
+                    action("c2pa.transcoded"),
+                ],
+            ),
+            external(vec![created()]),
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "HM", "{verdict:?}");
+        assert_eq!(
+            verdict.summary,
+            "HM · captured with Pixel Camera (Google LLC), then edited: crop, mute, compression"
+        );
+        assert_eq!(verdict.signers, vec!["service", "external"]);
+    }
+
+    #[test]
+    fn a_non_permitted_edit_over_an_external_capture_is_unknown() {
+        for bad in [
+            action("c2pa.placed"),
+            action("c2pa.edited"),
+            described("c2pa.edited", "replaced the sky"),
+        ] {
+            let report = report(vec![
+                manifest(
+                    SignerRole::Service,
+                    vec![action("c2pa.opened"), bad.clone()],
+                ),
+                external(vec![created()]),
+            ]);
+            let verdict = assign_label(&report);
+            assert_eq!(verdict.label, "Unknown", "{bad:?}");
+            assert!(verdict.reasons.contains(&"disallowed_action".to_string()));
+        }
+    }
+
+    #[test]
+    fn the_external_manifest_itself_may_only_add_permitted_actions() {
+        let ok = report(vec![external(vec![created(), action("c2pa.resized")])]);
+        assert_eq!(assign_label(&ok).label, "HM");
+        let bad = report(vec![external(vec![created(), action("c2pa.placed")])]);
+        let verdict = assign_label(&bad);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict.reasons.contains(&"disallowed_action".to_string()));
+    }
+
+    #[test]
+    fn an_edit_signed_by_anyone_else_over_an_external_capture_is_unknown() {
+        // A third-party editor (not our Service ICA) re-signs the capture.
+        let report = report(vec![
+            manifest(SignerRole::Unknown, vec![action("c2pa.opened")]),
+            external(vec![created()]),
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict.reasons.contains(&"signer_not_ours".to_string()));
+    }
+
+    #[test]
+    fn our_device_never_signs_over_an_external_capture() {
+        let opened = report(vec![
+            manifest(SignerRole::Device, vec![action("c2pa.opened")]),
+            external(vec![created()]),
+        ]);
+        let verdict = assign_label(&opened);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict
+            .reasons
+            .contains(&"device_over_external".to_string()));
+
+        let two = report(vec![
+            manifest(SignerRole::Device, vec![created()]),
+            external(vec![created()]),
+        ]);
+        let verdict = assign_label(&two);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict
+            .reasons
+            .contains(&"multiple_capture_origins".to_string()));
+    }
+
+    #[test]
+    fn only_one_external_capture_origin() {
+        let report = report(vec![
+            external(vec![created()]),
+            ManifestRecord {
+                id: "urn:other".into(),
+                ..external(vec![created()])
+            },
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict
+            .reasons
+            .contains(&"multiple_capture_origins".to_string()));
+    }
+
+    #[test]
+    fn an_external_role_without_an_accepted_origin_is_not_ours() {
+        let report = report(vec![manifest(SignerRole::External, vec![created()])]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict.reasons.contains(&"signer_not_ours".to_string()));
+    }
+
+    #[test]
+    fn an_external_capture_still_needs_valid_credentials() {
+        let mut r = report(vec![external(vec![created()])]);
+        r.validation_codes
+            .push("assertion.dataHash.mismatch".into());
+        assert_eq!(assign_label(&r).label, "Unknown");
+        let mut r = report(vec![external(vec![created()])]);
+        r.sources.push(TRAINED_ALGORITHMIC.into());
+        assert_eq!(assign_label(&r).label, "AI");
+    }
+
+    #[test]
+    fn a_role_map_cannot_grant_the_external_role() {
+        let store = store_with_actions(json!([{
+            "action": "c2pa.created",
+            "digitalSourceType": DIGITAL_CAPTURE
+        }]));
+        let roles = HashMap::from([("urn:1".to_string(), SignerRole::External)]);
+        let report = report_from_store_with_roles(&store, false, &roles);
+        assert_eq!(report.manifests[0].role, SignerRole::Unknown);
+        assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    #[cfg(feature = "c2pa")]
+    #[test]
+    fn the_external_verdict_decides_the_role() {
+        use crate::external_trust::{
+            ExternalAction, ExternalManifestInfo, ExternalProduct, ExternalVerdict,
+        };
+        let info = ExternalManifestInfo {
+            actions: vec![ExternalAction {
+                action: "c2pa.created".into(),
+                digital_source_type: Some(DIGITAL_CAPTURE.into()),
+            }],
+            ..ExternalManifestInfo::default()
+        };
+        let hm = ExternalVerdict::Hm {
+            product: ExternalProduct {
+                organization: "Google LLC".into(),
+                common_name: "Pixel Camera".into(),
+                min_version: None,
+                assurance_level: 2,
+                issuer: "Google LLC".into(),
+            },
+        };
+        let record = external_record_from("urn:x", &info, hm);
+        assert_eq!(record.role, SignerRole::External);
+        assert_eq!(record.external, Some(origin()));
+        assert_eq!(record.actions, vec![created()]);
+        assert_eq!(assign_label(&report(vec![record])).label, "HM");
+
+        let unknown = ExternalVerdict::Unknown {
+            reason: "not bound".into(),
+        };
+        let record = external_record_from("urn:x", &info, unknown);
+        assert_eq!(record.role, SignerRole::Unknown);
+        assert_eq!(record.external, None);
+        assert_eq!(assign_label(&report(vec![record])).label, "Unknown");
+
+        // The production entry point with an untrusted chain.
+        let record = external_manifest_record("urn:x", &info);
+        assert_eq!(record.role, SignerRole::Unknown);
     }
 
     fn store_with_actions(actions: serde_json::Value) -> serde_json::Value {

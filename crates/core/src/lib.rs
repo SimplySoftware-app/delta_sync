@@ -35,8 +35,11 @@ pub use error::CoreError;
 pub use keys::{
     generate_device_key, DevAuthority, DeviceKey, IssuedCert, DEVICE_ICA_CN, SERVICE_ICA_CN,
 };
+#[cfg(feature = "c2pa")]
+pub use label::external_manifest_record;
 pub use label::{
-    assign_label, ActionRecord, CredentialReport, Label, LabelVerdict, ManifestRecord, SignerRole,
+    assign_label, ActionRecord, CredentialReport, ExternalOrigin, Label, LabelVerdict,
+    ManifestRecord, SignerRole,
 };
 
 #[cfg(feature = "c2pa")]
