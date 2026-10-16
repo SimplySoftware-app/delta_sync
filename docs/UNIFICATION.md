@@ -13,8 +13,8 @@ estos 5 PR.
 | 1 | Workspace Cargo (`server`, `crates/core`). Importa el núcleo Rust de Social (`delta_sync_core`) sin cambios de comportamiento, con sus tests. CI ejecuta `cargo test --workspace --locked`. Arregla el test inestable `live_mode_rejects_a_fake_attestation`. Licencia Apache-2.0 en todos los `Cargo.toml`. | Hecho |
 | 2 | Autoridad: root, Device ICA y Service ICA (P-256), EKU `c2pa-kp-claimSigning` (1.3.6.1.4.1.62558.2.1) en lugar de emailProtection, cert de dispositivo de 24 h como máximo (por defecto 15 min), clave de servicio persistente, TSA RFC 3161 externa y configurable (por defecto `http://timestamp.digicert.com`; los tests no usan red), `POST /internal/seal` (el servicio firma derivados y ediciones con el cert del Service ICA, `parentOf` = original, solo si el original es una captura HM bajo la Device ICA), `POST /v1/verify` con el `LabelVerdict`. `/v1/enroll` solo con `ATTESTATION_MODE=stub`. | Hecho |
 | 3 | Trait `DeviceSigner` (Secure Enclave / StrongBox) y `sign_capture_file` en el core; las apps de demo usan el core por UniFFI. JPEG, MOV y MP4. `sdk/swift` (XCFramework) y `sdk/kotlin` (AAR). | En revisión |
-| 4 | Reglas de etiqueta por ICA, mute como `c2pa.edited` con descripción "audio removed" (añadida a las acciones permitidas), cover registrado como acción y póster firmado como derivado propio, TSA en la firma del dispositivo, BMFF con merkle. Fixtures de vídeo. | Este PR |
-| 5 | CI de release: XCFramework, AAR y etiqueta. | Pendiente |
+| 4 | Reglas de etiqueta por ICA, mute como `c2pa.edited` con descripción "audio removed" (añadida a las acciones permitidas), cover registrado como acción y póster firmado como derivado propio, TSA en la firma del dispositivo, BMFF con merkle. Fixtures de vídeo. | En revisión |
+| 5 | CI de release por etiqueta: XCFramework, AAR y checksums (ver `docs/RELEASES.md`). | Este PR |
 
 ## Decisiones aprobadas
 
