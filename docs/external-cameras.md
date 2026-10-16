@@ -21,8 +21,11 @@ falla cualquiera, el veredicto es **Unknown**; nunca se adivina.
    ninguna acción lleva otro `digitalSourceType` (IA, composite, etc.) y no hay
    acción, tipo de origen ni aserción de `disallowedSignals`
    (`capturedMediaStitched` equivale a `compositeCapture`; las etiquetas se
-   comparan sin el sufijo `__N`). Una señal que el código no reconoce falla
-   cerrado.
+   comparan sin los sufijos `__N` y `.vN`). Solo se reconocen los nombres de
+   inception conocidos y las etiquetas `(c2pa|stds|cawg).[a-z0-9_]+(...)`; una
+   URL IPTC completa, un comodín (`c2pa.*`) u otro espacio de nombres falla
+   cerrado. La hoja no puede llevar `anyExtendedKeyUsage` y las intermedias
+   necesitan `keyCertSign`.
 6. (Integración en la etiqueta, pendiente) Las ediciones posteriores deben ser
    acciones permitidas o nuestro sello de servicio.
 

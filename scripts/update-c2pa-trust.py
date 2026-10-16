@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Actualiza las listas oficiales C2PA vendorizadas en trust/c2pa/.
 
-Uso: scripts/update-c2pa-trust.py [COMMIT | --list-eligible]
+Uso: scripts/update-c2pa-trust.py [COMMIT | --list-eligible [FICHERO]]
 
 --list-eligible imprime, sin red, los productos elegibles de los ficheros ya
 vendorizados (lo usa el test de paridad con Rust).
@@ -73,7 +73,18 @@ def verify(name, data):
 
 
 # Debe coincidir con signal_recognised / signal_matches_capture de Rust.
-KNOWN_SIGNALS = {"capturedMedia", "capturedMediaStitched", "nonGenAIDigitalCreation", "digitalCapture"}
+# Lista cerrada: nombres de inception (y sus equivalentes IPTC cortos) mas
+# etiquetas ^(c2pa|stds|cawg)\.[a-z0-9_]+(\.[a-z0-9_]+)*$. URLs IPTC completas,
+# comodines y otros espacios de nombres no se reconocen (falla cerrado).
+KNOWN_SIGNALS = {
+    "capturedMedia",
+    "capturedMediaStitched",
+    "nonGenAIDigitalCreation",
+    "digitalCapture",
+    "compositeCapture",
+    "digitalCreation",
+}
+LABEL_RE = re.compile(r"(c2pa|stds|cawg)\.[a-z0-9_]+(\.[a-z0-9_]+)*")
 CAPTURE_SIGNALS = {"capturedMedia", "digitalCapture"}
 
 
@@ -81,7 +92,7 @@ def eligible_record(r):
     """Misma regla que TrustStore::eligible_products en Rust (condiciones 2, 3 y 5).
 
     Se miran inception y transformation. Una senal que el codigo no reconoce
-    (ni nombre conocido ni etiqueta con punto, p. ej. c2pa.resized) descarta el
+    (ni nombre conocido ni etiqueta c2pa/stds/cawg, p. ej. c2pa.resized) descarta el
     producto: falla cerrado, igual que Rust.
     """
     p = r["product"]
@@ -92,7 +103,7 @@ def eligible_record(r):
         r.get("status") == "conformant"
         and p.get("productType") == "generatorProduct"
         and level >= MIN_ASSURANCE
-        and all(s in KNOWN_SIGNALS or "." in s for s in signals)
+        and all(s in KNOWN_SIGNALS or LABEL_RE.fullmatch(s) for s in signals)
         and not any(s in CAPTURE_SIGNALS for s in signals)
     )
 
@@ -121,7 +132,8 @@ def read(path):
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--list-eligible":
         # Sin red: lista el conjunto elegible de los ficheros vendorizados.
-        for o, cn in sorted(eligible(read(os.path.join(OUT, "conforming-products-list.json")))):
+        path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(OUT, "conforming-products-list.json")
+        for o, cn in sorted(eligible(read(path))):
             print("%s / %s" % (o, cn))
         return
     ref = sys.argv[1] if len(sys.argv) > 1 else "main"

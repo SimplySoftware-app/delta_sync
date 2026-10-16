@@ -238,7 +238,7 @@ impl TrustStore {
         out
     }
 
-    pub fn verdict_at(&self, info: &ExternalManifestInfo, at_unix: i64) -> ExternalVerdict {
+    pub(crate) fn verdict_at(&self, info: &ExternalManifestInfo, at_unix: i64) -> ExternalVerdict {
         match self.evaluate(info, at_unix) {
             Ok(product) => ExternalVerdict::Hm { product },
             Err(reason) => ExternalVerdict::Unknown { reason },
@@ -289,7 +289,7 @@ impl TrustStore {
             return Err("manifest has no signer certificate".into());
         }
         let at_time =
-            ASN1Time::from_timestamp(at).map_err(|_| "invalid signing time".to_string())?;
+            ASN1Time::from_timestamp(at).map_err(|_| "invalid verification time".to_string())?;
         let certs: Vec<X509Certificate> = chain
             .iter()
             .map(|der| match X509Certificate::from_der(der) {
@@ -309,13 +309,21 @@ impl TrustStore {
             for (i, cert) in certs.iter().enumerate() {
                 if !cert.validity().is_valid_at(at_time) {
                     return Err(format!(
-                        "certificate {i} of the chain is not valid at the signing time"
+                        "certificate {i} of the chain is not valid at the verification time"
                     ));
                 }
                 if i > 0 {
                     // CA certificates below this one: certs 1..i-1.
                     check_ca(cert, i - 1)
                         .map_err(|e| format!("certificate {i} of the chain {e}"))?;
+                    match cert.key_usage() {
+                        Ok(Some(ku)) if ku.value.key_cert_sign() => {}
+                        _ => {
+                            return Err(format!(
+                                "certificate {i} of the chain lacks the keyCertSign key usage"
+                            ))
+                        }
+                    }
                 }
                 if uses_sha1(cert) {
                     return Err(format!("certificate {i} of the chain is signed with SHA-1"));
@@ -425,11 +433,12 @@ fn check_leaf(leaf: &X509Certificate) -> Result<(), String> {
     }
     match leaf.extended_key_usage() {
         Ok(Some(eku))
-            if eku
-                .value
-                .other
-                .iter()
-                .any(|o| *o == EKU_C2PA_CLAIM_SIGNING || *o == EKU_DOCUMENT_SIGNING) => {}
+            if !eku.value.any
+                && eku
+                    .value
+                    .other
+                    .iter()
+                    .any(|o| *o == EKU_C2PA_CLAIM_SIGNING || *o == EKU_DOCUMENT_SIGNING) => {}
         _ => {
             return Err(
                 "signer certificate lacks the c2pa claimSigning or documentSigning EKU".into(),
@@ -471,16 +480,44 @@ fn iptc_equivalent(signal: &str) -> Option<&'static str> {
     }
 }
 
-/// A `disallowedSignals` name this code knows how to evaluate: an inception
-/// name or IPTC source type, or a namespaced action / assertion label
-/// (`c2pa.resized`, `stds.exif`). Anything else fails closed.
+/// A `disallowedSignals` name this code knows how to evaluate, from an
+/// explicit allowlist: the inception names and the short IPTC source types
+/// they map to, or a namespaced action / assertion label
+/// `^(c2pa|stds|cawg)\.[a-z0-9_]+(\.[a-z0-9_]+)*$`. Everything else fails
+/// closed: full IPTC URLs, wildcards such as `c2pa.*`, unknown namespaces.
 fn signal_recognised(signal: &str) -> bool {
-    iptc_equivalent(signal).is_some() || signal == "digitalCapture" || signal.contains('.')
+    matches!(
+        signal,
+        "capturedMedia"
+            | "capturedMediaStitched"
+            | "nonGenAIDigitalCreation"
+            | "digitalCapture"
+            | "compositeCapture"
+            | "digitalCreation"
+    ) || is_namespaced_label(signal)
 }
 
-/// Assertion label without a trailing `__N` version suffix.
+fn is_namespaced_label(s: &str) -> bool {
+    let Some((ns, rest)) = s.split_once('.') else {
+        return false;
+    };
+    matches!(ns, "c2pa" | "stds" | "cawg")
+        && rest.split('.').all(|seg| {
+            !seg.is_empty()
+                && seg
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+}
+
+/// Label or action name without a trailing `__N` and then `.vN` version
+/// suffix, so `c2pa.actions.v2` and `c2pa.actions` compare equal.
 fn strip_label_version(label: &str) -> &str {
-    match label.rsplit_once("__") {
+    let label = match label.rsplit_once("__") {
+        Some((base, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => base,
+        _ => label,
+    };
+    match label.rsplit_once(".v") {
         Some((base, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => base,
         _ => label,
     }
@@ -584,16 +621,17 @@ fn check_record(
                 format!("{name}: disallowed signal {signal:?} is not recognised"),
             ));
         }
+        let sig = strip_label_version(signal);
         let hit = info.actions.iter().any(|a| {
-            a.action == signal
+            strip_label_version(&a.action) == sig
                 || a.digital_source_type.as_deref().is_some_and(|d| {
                     let seg = last_segment(d);
-                    seg == signal || iptc_equivalent(signal) == Some(seg)
+                    seg == sig || iptc_equivalent(sig) == Some(seg)
                 })
         }) || info
             .assertion_labels
             .iter()
-            .any(|l| strip_label_version(l) == signal);
+            .any(|l| strip_label_version(l) == sig);
         if hit {
             return Err((
                 4,
@@ -908,6 +946,34 @@ mod tests {
             ])],
         );
         assert!(is_hm(&s.verdict_at(&info(vec![doc]), NOW)));
+    }
+
+    #[test]
+    fn leaf_with_any_extended_key_usage_is_rejected() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let any = eku_leaf(
+            &pki,
+            vec![
+                ExtendedKeyUsagePurpose::Any,
+                ExtendedKeyUsagePurpose::Other(vec![1, 3, 6, 1, 4, 1, 62558, 2, 1]),
+            ],
+        );
+        assert!(!is_hm(&s.verdict_at(&info(vec![any]), NOW)));
+    }
+
+    #[test]
+    fn intermediate_needs_key_cert_sign() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let k = KeyPair::generate().unwrap();
+        let mut p = params("ICA", Some("Test Root"), true);
+        p.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        let ica = p.signed_by(&k, &pki.root, &pki.root_key).unwrap();
+        let kl = KeyPair::generate().unwrap();
+        let leaf = params(CN, Some(O), false).signed_by(&kl, &ica, &k).unwrap();
+        let chain = vec![leaf.der().to_vec(), ica.der().to_vec()];
+        assert!(reason(s.verdict_at(&info(chain), NOW)).contains("keyCertSign"));
     }
 
     #[test]
@@ -1305,6 +1371,108 @@ mod tests {
         assert_eq!(s.eligible_products().len(), 1);
     }
 
+    fn signal_record(signals: Value) -> Value {
+        let mut r = record(O, CN, 2);
+        r["product"]["disallowedSignals"]["transformation"] = signals;
+        r
+    }
+
+    #[test]
+    fn probe_full_iptc_url_signal_fails_closed() {
+        let pki = new_root("Test Root");
+        let url = "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture";
+        let s = store(&pki, vec![signal_record(json!([url]))]);
+        let v = s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW);
+        assert!(reason(v).contains("not recognised"));
+        assert!(s.eligible_products().is_empty());
+    }
+
+    #[test]
+    fn probe_versioned_labels_match_both_ways() {
+        let pki = new_root("Test Root");
+        for (signal, label) in [
+            ("c2pa.actions", "c2pa.actions.v2"),
+            ("c2pa.actions.v2", "c2pa.actions"),
+            ("stds.exif", "stds.exif__3"),
+        ] {
+            let s = store(&pki, vec![signal_record(json!([signal]))]);
+            let mut i = info(vec![leaf(&pki, O, CN)]);
+            i.assertion_labels.push(label.into());
+            assert!(
+                reason(s.verdict_at(&i, NOW)).contains("disallowed"),
+                "{signal} vs {label}"
+            );
+        }
+        assert_eq!(strip_label_version("c2pa.actions.v2"), "c2pa.actions");
+        assert_eq!(strip_label_version("c2pa.actions.v2__1"), "c2pa.actions");
+        assert_eq!(strip_label_version("c2pa.vivid"), "c2pa.vivid");
+    }
+
+    #[test]
+    fn probe_wildcards_fail_closed() {
+        let pki = new_root("Test Root");
+        for sig in ["c2pa.*", "*", "c2pa.", "c2pa..x", "c2pa.A"] {
+            let s = store(&pki, vec![signal_record(json!([sig]))]);
+            let v = s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW);
+            assert!(reason(v).contains("not recognised"), "{sig}");
+            assert!(s.eligible_products().is_empty());
+        }
+    }
+
+    #[test]
+    fn probe_unknown_namespaces_fail_closed() {
+        let pki = new_root("Test Root");
+        for sig in ["foo.bar", "x.c2pa.actions", "capturedmedia"] {
+            let s = store(&pki, vec![signal_record(json!([sig]))]);
+            let v = s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW);
+            assert!(reason(v).contains("not recognised"), "{sig}");
+        }
+        // Hyphens and capitals are outside the allowlist pattern.
+        assert!(is_namespaced_label("c2pa.resized"));
+        assert!(!is_namespaced_label("cawg.training-mining"));
+        assert!(!is_namespaced_label("stds.schema-org.CreativeWork"));
+    }
+
+    #[test]
+    fn python_updater_agrees_on_probe_signals() {
+        let probes = [
+            json!(["c2pa.resized"]),
+            json!(["http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"]),
+            json!(["c2pa.*"]),
+            json!(["c2pa.actions.v2"]),
+            json!(["foo.bar"]),
+            json!(["capturedMediaStitched"]),
+            json!(["capturedMedia"]),
+            json!(["digitalCapture"]),
+            json!(["compositeCapture", "stds.exif"]),
+            json!(["somethingNew"]),
+            json!(["cawg.training-mining"]),
+            json!([]),
+        ];
+        let pki = new_root("Test Root");
+        let records: Vec<Value> = probes
+            .iter()
+            .enumerate()
+            .map(|(n, sigs)| {
+                let mut r = signal_record(sigs.clone());
+                r["product"]["DN"]["CN"] = json!(format!("Cam {n:02}"));
+                r
+            })
+            .collect();
+        let body = serde_json::to_vec(&records).unwrap();
+        let path = std::env::temp_dir().join(format!("c2pa-probe-{}.json", std::process::id()));
+        std::fs::write(&path, &body).unwrap();
+        let py = python_eligible(Some(path.to_str().unwrap()));
+        std::fs::remove_file(&path).ok();
+        let rust: Vec<String> = store(&pki, records)
+            .eligible_products()
+            .into_iter()
+            .map(|(o, c)| format!("{o} / {c}"))
+            .collect();
+        assert_eq!(py, rust);
+        assert!(!rust.is_empty() && rust.len() < probes.len());
+    }
+
     #[test]
     fn unrecognised_signal_fails_closed() {
         let pki = new_root("Test Root");
@@ -1318,16 +1486,17 @@ mod tests {
 
     // Production data.
 
-    #[test]
-    fn python_updater_agrees_on_the_eligible_set() {
-        // scripts/update-c2pa-trust.py decides which products a list update
-        // gains or loses. Its filter must equal this crate's.
+    /// Eligible `O / CN` lines from scripts/update-c2pa-trust.py, optionally
+    /// over a different record file.
+    fn python_eligible(path: Option<&str>) -> Vec<String> {
         let script = concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../scripts/update-c2pa-trust.py"
         );
+        let mut args = vec!["-I", script, "--list-eligible"];
+        args.extend(path);
         let out = std::process::Command::new("python3")
-            .args(["-I", script, "--list-eligible"])
+            .args(args)
             .output()
             .expect("python3 is required for the parity test");
         assert!(
@@ -1335,18 +1504,24 @@ mod tests {
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let py: Vec<String> = String::from_utf8(out.stdout)
+        String::from_utf8(out.stdout)
             .unwrap()
             .lines()
             .map(str::to_owned)
-            .collect();
+            .collect()
+    }
+
+    #[test]
+    fn python_updater_agrees_on_the_eligible_set() {
+        // scripts/update-c2pa-trust.py decides which products a list update
+        // gains or loses. Its filter must equal this crate's.
         let rust: Vec<String> = TrustStore::vendored()
             .unwrap()
             .eligible_products()
             .into_iter()
             .map(|(o, c)| format!("{o} / {c}"))
             .collect();
-        assert_eq!(py, rust);
+        assert_eq!(python_eligible(None), rust);
     }
 
     #[test]

@@ -51,20 +51,25 @@ jobs:
         run: |
           # La rama se nombra por el SHA del upstream: mismo SHA, misma rama.
           branch="chore/c2pa-trust-$SHORT"
+          # Rama y PR abiertos: ya esta hecho. Rama sin PR: se reintenta crear
+          # el PR (y falla en rojo si no se puede) para no ocultar un SHA atascado.
+          branch_exists=false
           if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-            echo "La rama $branch ya existe en el remoto. Nada que hacer."
-            exit 0
-          fi
-          if [ -n "$(gh pr list --head "$branch" --state open --json number -q '.[].number')" ]; then
-            echo "Ya hay un PR abierto para $branch. Nada que hacer."
-            exit 0
+            branch_exists=true
+            if [ -n "$(gh pr list --head "$branch" --state open --json number -q '.[].number')" ]; then
+              echo "La rama $branch y su PR abierto ya existen. Nada que hacer."
+              exit 0
+            fi
+            echo "La rama $branch existe sin PR abierto: se crea el PR."
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add trust/c2pa
-          git commit -m "Actualizar listas oficiales C2PA ($SHORT)"
-          git push origin "$branch"
+          if [ "$branch_exists" = false ]; then
+            git checkout -b "$branch"
+            git add trust/c2pa
+            git commit -m "Actualizar listas oficiales C2PA ($SHORT)"
+            git push origin "$branch"
+          fi
           if ! gh pr create \
             --base "${{ github.event.repository.default_branch }}" \
             --head "$branch" \
