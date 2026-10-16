@@ -14,6 +14,8 @@ uniffi::setup_scaffolding!();
 
 mod edit;
 mod error;
+#[cfg(feature = "c2pa")]
+pub mod external_trust;
 mod keys;
 mod label;
 

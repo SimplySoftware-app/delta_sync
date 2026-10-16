@@ -1,0 +1,61 @@
+name: Actualizar listas C2PA
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # lunes 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Actualizar listas oficiales C2PA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Descargar las listas del ultimo main de c2pa-org/conformance-public
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/update-c2pa-trust.py main > "$RUNNER_TEMP/summary.md"
+
+      - name: Preparar cuerpo y titulo del PR
+        id: prep
+        run: |
+          if git diff --quiet -- trust/c2pa; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sha=$(sed -n 's/^commit = "\(.*\)"$/\1/p' trust/c2pa/SOURCE.lock)
+          {
+            echo "changed=true"
+            echo "short=${sha:0:10}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "Actualizacion automatica de las listas oficiales C2PA."
+            echo
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "No se fusiona sola. Revisar el diff de elegibilidad y que los tests pasen (el test del conjunto elegible puede necesitar actualizarse)."
+          } > "$RUNNER_TEMP/body.md"
+
+      - name: Abrir PR
+        if: steps.prep.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT: ${{ steps.prep.outputs.short }}
+        run: |
+          branch="chore/c2pa-trust-$SHORT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add trust/c2pa
+          git commit -m "Actualizar listas oficiales C2PA ($SHORT)"
+          git push origin "$branch"
+          gh pr create \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$branch" \
+            --title "Actualizar listas oficiales C2PA ($SHORT)" \
+            --body-file "$RUNNER_TEMP/body.md"
