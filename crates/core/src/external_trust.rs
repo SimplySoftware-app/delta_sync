@@ -5,23 +5,39 @@
 //! `Unknown`. Nothing is guessed.
 //!
 //! 1. The signer certificate chains to the pinned C2PA Trust List anchors.
-//! 2. The signer certificate subject `O` and `CN` match a conformance record
-//!    with `productType == generatorProduct` and `status == conformant`.
+//!    The leaf is a non-CA certificate with `digitalSignature` key usage and
+//!    the `c2pa-kp-claimSigning` or `id-kp-documentSigning` EKU; every
+//!    intermediate is a CA and respects its `pathLen`.
+//! 2. The signer certificate subject has exactly one `O` and one `CN`, and
+//!    `O`, `CN`, `C` (and `OU` when the record has one) match a conformance
+//!    record with `productType == generatorProduct` and
+//!    `status == conformant`.
 //! 3. That record's `maxAssuranceLevel` is at least [`MIN_EXTERNAL_ASSURANCE`].
 //! 4. The claim generator version is at least the record's `minVersion` (when
 //!    set) and the asset MIME type is in the record's `containers.generate`.
-//! 5. The manifest has `c2pa.created` with `digitalSourceType` digitalCapture
-//!    and no action, source type or assertion named in `disallowedSignals`.
+//! 5. The manifest has exactly one inception action (`c2pa.created` or
+//!    `c2pa.opened`), it is `c2pa.created` with `digitalSourceType`
+//!    digitalCapture, no action carries any other `digitalSourceType`, and no
+//!    action, source type or assertion is named in `disallowedSignals`. A
+//!    signal name this code does not recognise fails closed.
 //! 6. (Label integration, later) Subsequent edits must be permitted actions
 //!    or our own service seal. Not decided here.
+//!
+//! The variant name [`ExternalVerdict::Hm`] is historical. This function only
+//! says that the *capture origin* is eligible to be called human-made. Edits
+//! after capture (rule 6) are judged by the label integration, which may still
+//! downgrade the final label.
 //!
 //! The lists are vendored under `trust/c2pa/` and embedded at compile time, so
 //! the verdict of a given binary is fixed by its build. `SOURCE.lock` pins the
 //! upstream commit and the sha256 of each file; a test fails if they drift.
 //!
-//! Not checked here: certificate revocation (CRL/OCSP) and the TSA list. The
-//! signing time comes from the caller: pass the trusted timestamp time when
-//! the manifest has one, otherwise the current time is used.
+//! Not checked here: certificate revocation (CRL/OCSP). Validity is always
+//! evaluated at the current time: no caller-supplied signing time is trusted.
+//! RFC 3161 timestamp tokens (which would allow validating at the original
+//! signing time against `C2PA-TSA-TRUST-LIST.pem`) are not verified yet, so a
+//! capture whose certificate has since expired is `Unknown`. The TSA list is
+//! vendored and hash-pinned for that future step.
 //!
 //! Signature algorithms are those `x509-parser` verifies through `ring`
 //! (RSA PKCS#1, ECDSA P-256/P-384 with SHA-256/384, Ed25519). A chain that
@@ -32,11 +48,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 use x509_parser::certificate::X509Certificate;
+use x509_parser::der_parser::oid;
 use x509_parser::der_parser::oid::Oid;
 use x509_parser::oid_registry::{OID_PKCS1_SHA1WITHRSA, OID_SHA1_WITH_RSA};
 use x509_parser::pem::Pem;
 use x509_parser::prelude::FromDer;
 use x509_parser::time::ASN1Time;
+use x509_parser::x509::X509Name;
 
 use crate::DIGITAL_CAPTURE;
 
@@ -61,13 +79,12 @@ pub struct ExternalAction {
 pub struct ExternalManifestInfo {
     /// Signer certificate chain in DER, leaf first.
     pub cert_chain_der: Vec<Vec<u8>>,
-    /// Trusted timestamp time (unix seconds). `None` uses the current time.
-    pub signing_time_unix: Option<i64>,
     pub claim_generator_name: String,
     pub claim_generator_version: Option<String>,
     pub mime: String,
     pub actions: Vec<ExternalAction>,
-    /// Labels of the other assertions in the manifest.
+    /// Labels of the other assertions in the manifest (a trailing `__N`
+    /// version suffix is ignored when comparing).
     pub assertion_labels: Vec<String>,
 }
 
@@ -114,6 +131,10 @@ struct Dn {
     cn: String,
     #[serde(rename = "O", default)]
     o: String,
+    #[serde(rename = "OU", default)]
+    ou: String,
+    #[serde(rename = "C", default)]
+    c: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,6 +228,7 @@ impl TrustStore {
                 r.status == "conformant"
                     && r.product.product_type == "generatorProduct"
                     && r.level() >= MIN_EXTERNAL_ASSURANCE
+                    && r.disallowed().all(signal_recognised)
                     && !r.disallowed().any(signal_matches_capture)
             })
             .map(|r| (r.product.dn.o.clone(), r.product.dn.cn.clone()))
@@ -228,9 +250,10 @@ impl TrustStore {
         info: &ExternalManifestInfo,
         at_unix: i64,
     ) -> Result<ExternalProduct, String> {
-        // 1. Chain to the pinned anchors.
-        let at = info.signing_time_unix.unwrap_or(at_unix);
-        let (org, cn) = self.validate_chain(&info.cert_chain_der, at)?;
+        // 1. Chain to the pinned anchors, evaluated at the current time.
+        let subject = self.validate_chain(&info.cert_chain_der, at_unix)?;
+        // 5 (record independent): capture origin.
+        check_inception(&info.actions)?;
 
         // 2-5, evaluated per record: the same DN can appear in several
         // versions. Any record that passes everything accepts the capture;
@@ -238,11 +261,12 @@ impl TrustStore {
         let candidates: Vec<&Record> = self
             .records
             .iter()
-            .filter(|r| r.product.dn.o == org && r.product.dn.cn == cn)
+            .filter(|r| subject.matches(&r.product.dn))
             .collect();
         if candidates.is_empty() {
             return Err(format!(
-                "signer {org} / {cn} is not in the C2PA conforming products list"
+                "signer {} / {} is not in the C2PA conforming products list",
+                subject.o, subject.cn
             ));
         }
         let mut worst: Option<(u8, String)> = None;
@@ -259,8 +283,8 @@ impl TrustStore {
         Err(worst.map(|(_, m)| m).unwrap_or_default())
     }
 
-    /// Returns the leaf subject `(O, CN)` when the chain is trusted at `at`.
-    fn validate_chain(&self, chain: &[Vec<u8>], at: i64) -> Result<(String, String), String> {
+    /// Returns the leaf subject when the chain is trusted at `at`.
+    fn validate_chain(&self, chain: &[Vec<u8>], at: i64) -> Result<Subject, String> {
         if chain.is_empty() {
             return Err("manifest has no signer certificate".into());
         }
@@ -280,9 +304,7 @@ impl TrustStore {
             .collect();
 
         let leaf = &certs[0];
-        if leaf.is_ca() {
-            return Err("signer certificate is a CA certificate".into());
-        }
+        check_leaf(leaf)?;
         let trusted = (|| {
             for (i, cert) in certs.iter().enumerate() {
                 if !cert.validity().is_valid_at(at_time) {
@@ -290,8 +312,10 @@ impl TrustStore {
                         "certificate {i} of the chain is not valid at the signing time"
                     ));
                 }
-                if i > 0 && !cert.is_ca() {
-                    return Err(format!("certificate {i} of the chain is not a CA"));
+                if i > 0 {
+                    // CA certificates below this one: certs 1..i-1.
+                    check_ca(cert, i - 1)
+                        .map_err(|e| format!("certificate {i} of the chain {e}"))?;
                 }
                 if uses_sha1(cert) {
                     return Err(format!("certificate {i} of the chain is signed with SHA-1"));
@@ -306,6 +330,7 @@ impl TrustStore {
                 }
                 if anchors.iter().any(|a| {
                     a.is_ca()
+                        && check_ca(a, i).is_ok()
                         && a.validity().is_valid_at(at_time)
                         && a.subject().as_raw() == cert.issuer().as_raw()
                         && cert.verify_signature(Some(a.public_key())).is_ok()
@@ -327,17 +352,107 @@ impl TrustStore {
         })();
         trusted?;
 
-        let org = first_attr(leaf.subject().iter_organization().next());
-        let cn = first_attr(leaf.subject().iter_common_name().next());
-        match (org, cn) {
-            (Some(o), Some(c)) => Ok((o, c)),
-            _ => Err("signer certificate subject lacks O or CN".into()),
-        }
+        parse_subject(leaf.subject())
     }
 }
 
-fn first_attr(attr: Option<&x509_parser::x509::AttributeTypeAndValue>) -> Option<String> {
-    attr.and_then(|a| a.as_str().ok()).map(str::to_owned)
+/// Leaf subject attributes used to find the conformance record.
+#[derive(Debug, PartialEq, Eq)]
+struct Subject {
+    o: String,
+    cn: String,
+    c: Option<String>,
+    ou: Option<String>,
+}
+
+impl Subject {
+    /// `O`, `CN` and `C` must equal the record's; `OU` too when the record
+    /// has one. An absent `C` only matches an empty record `C`.
+    fn matches(&self, dn: &Dn) -> bool {
+        self.o == dn.o
+            && self.cn == dn.cn
+            && self.c.as_deref().unwrap_or("") == dn.c
+            && (dn.ou.is_empty() || self.ou.as_deref() == Some(dn.ou.as_str()))
+    }
+}
+
+fn single_attr<'a>(
+    mut iter: impl Iterator<Item = &'a x509_parser::x509::AttributeTypeAndValue<'a>>,
+    name: &str,
+    required: bool,
+) -> Result<Option<String>, String> {
+    let first = iter.next();
+    if iter.next().is_some() {
+        return Err(format!(
+            "signer certificate subject has more than one {name}"
+        ));
+    }
+    match first {
+        None if required => Err(format!("signer certificate subject lacks {name}")),
+        None => Ok(None),
+        Some(a) => a
+            .as_str()
+            .map(|v| Some(v.to_owned()))
+            .map_err(|_| format!("signer certificate subject {name} is not a string")),
+    }
+}
+
+/// Exactly one `O` and one `CN`; at most one `C` and `OU` (more is ambiguous
+/// and fails closed).
+fn parse_subject(name: &X509Name) -> Result<Subject, String> {
+    Ok(Subject {
+        o: single_attr(name.iter_organization(), "O", true)?.unwrap_or_default(),
+        cn: single_attr(name.iter_common_name(), "CN", true)?.unwrap_or_default(),
+        c: single_attr(name.iter_country(), "C", false)?,
+        ou: single_attr(name.iter_organizational_unit(), "OU", false)?,
+    })
+}
+
+/// c2pa-kp-claimSigning.
+const EKU_C2PA_CLAIM_SIGNING: Oid<'static> = oid!(1.3.6 .1 .4 .1 .62558 .2 .1);
+/// id-kp-documentSigning.
+const EKU_DOCUMENT_SIGNING: Oid<'static> = oid!(1.3.6 .1 .5 .5 .7 .3 .36);
+
+/// The signer certificate: not a CA, `digitalSignature`, claim/document
+/// signing EKU.
+fn check_leaf(leaf: &X509Certificate) -> Result<(), String> {
+    if leaf.is_ca() {
+        return Err("signer certificate is a CA certificate".into());
+    }
+    match leaf.key_usage() {
+        Ok(Some(ku)) if ku.value.digital_signature() => {}
+        _ => return Err("signer certificate lacks the digitalSignature key usage".into()),
+    }
+    match leaf.extended_key_usage() {
+        Ok(Some(eku))
+            if eku
+                .value
+                .other
+                .iter()
+                .any(|o| *o == EKU_C2PA_CLAIM_SIGNING || *o == EKU_DOCUMENT_SIGNING) => {}
+        _ => {
+            return Err(
+                "signer certificate lacks the c2pa claimSigning or documentSigning EKU".into(),
+            )
+        }
+    }
+    Ok(())
+}
+
+/// A CA certificate in the chain: `basicConstraints` CA=true, and `pathLen`
+/// (when set) allows `below` CA certificates between it and the leaf.
+fn check_ca(cert: &X509Certificate, below: usize) -> Result<(), String> {
+    match cert.basic_constraints() {
+        Ok(Some(bc)) if bc.value.ca => {
+            if let Some(max) = bc.value.path_len_constraint {
+                if below as u64 > u64::from(max) {
+                    return Err(format!("exceeds its pathLen constraint of {max}"));
+                }
+            }
+            Ok(())
+        }
+        _ => Err("is not a CA".into()),
+    }
 }
 
 fn uses_sha1(cert: &X509Certificate) -> bool {
@@ -350,9 +465,47 @@ fn uses_sha1(cert: &X509Certificate) -> bool {
 fn iptc_equivalent(signal: &str) -> Option<&'static str> {
     match signal {
         "capturedMedia" => Some("digitalCapture"),
+        "capturedMediaStitched" => Some("compositeCapture"),
         "nonGenAIDigitalCreation" => Some("digitalCreation"),
         _ => None,
     }
+}
+
+/// A `disallowedSignals` name this code knows how to evaluate: an inception
+/// name or IPTC source type, or a namespaced action / assertion label
+/// (`c2pa.resized`, `stds.exif`). Anything else fails closed.
+fn signal_recognised(signal: &str) -> bool {
+    iptc_equivalent(signal).is_some() || signal == "digitalCapture" || signal.contains('.')
+}
+
+/// Assertion label without a trailing `__N` version suffix.
+fn strip_label_version(label: &str) -> &str {
+    match label.rsplit_once("__") {
+        Some((base, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => base,
+        _ => label,
+    }
+}
+
+/// Rule 5, independent of the record: one inception action, a digital
+/// capture, and no other `digitalSourceType` anywhere in the manifest.
+fn check_inception(actions: &[ExternalAction]) -> Result<(), String> {
+    let inceptions = actions
+        .iter()
+        .filter(|a| a.action == "c2pa.created" || a.action == "c2pa.opened")
+        .count();
+    if inceptions > 1 {
+        return Err("manifest has more than one c2pa.created/c2pa.opened action".into());
+    }
+    if let Some(other) = actions
+        .iter()
+        .filter_map(|a| a.digital_source_type.as_deref())
+        .find(|d| *d != DIGITAL_CAPTURE)
+    {
+        return Err(format!(
+            "an action carries digitalSourceType {other:?}, not digitalCapture"
+        ));
+    }
+    Ok(())
 }
 
 fn signal_matches_capture(signal: &str) -> bool {
@@ -425,13 +578,22 @@ fn check_record(
         ));
     }
     for signal in record.disallowed() {
+        if !signal_recognised(signal) {
+            return Err((
+                4,
+                format!("{name}: disallowed signal {signal:?} is not recognised"),
+            ));
+        }
         let hit = info.actions.iter().any(|a| {
             a.action == signal
                 || a.digital_source_type.as_deref().is_some_and(|d| {
                     let seg = last_segment(d);
                     seg == signal || iptc_equivalent(signal) == Some(seg)
                 })
-        }) || info.assertion_labels.iter().any(|l| l == signal);
+        }) || info
+            .assertion_labels
+            .iter()
+            .any(|l| strip_label_version(l) == signal);
         if hit {
             return Err((
                 4,
@@ -481,6 +643,16 @@ fn compare_versions(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
 }
 
 /// Verdict for an external capture against the vendored official lists.
+///
+/// The caller MUST pass data taken from a manifest that c2pa-rs has already
+/// validated, including the claim signature and the hard bindings (the
+/// asset hash), and `mime` MUST come from the actual asset bytes, not from a
+/// file name or a header. This function trusts those inputs: it checks the
+/// signer chain, the conformance record and the capture claims, never the
+/// manifest signature or the asset itself.
+///
+/// `Hm` means only that the capture origin is eligible. Edits after capture
+/// are judged by the label integration (rule 6).
 pub fn external_capture_verdict(manifest_info: &ExternalManifestInfo) -> ExternalVerdict {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -498,7 +670,8 @@ pub fn external_capture_verdict(manifest_info: &ExternalManifestInfo) -> Externa
 mod tests {
     use super::*;
     use rcgen::{
-        BasicConstraints, Certificate, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose,
+        BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa,
+        KeyPair, KeyUsagePurpose,
     };
     use serde_json::{json, Value};
     use sha2::{Digest, Sha256};
@@ -514,6 +687,7 @@ mod tests {
     fn params(cn: &str, o: Option<&str>, ca: bool) -> CertificateParams {
         let mut p = CertificateParams::new(vec![]).unwrap();
         p.distinguished_name.push(DnType::CommonName, cn);
+        p.distinguished_name.push(DnType::CountryName, "US");
         if let Some(o) = o {
             p.distinguished_name.push(DnType::OrganizationName, o);
         }
@@ -522,6 +696,9 @@ mod tests {
             p.key_usages = vec![KeyUsagePurpose::KeyCertSign];
         } else {
             p.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+            p.extended_key_usages = vec![ExtendedKeyUsagePurpose::Other(vec![
+                1, 3, 6, 1, 4, 1, 62558, 2, 1,
+            ])];
         }
         p.not_before = OffsetDateTime::from_unix_timestamp(NOW - 86_400 * 30).unwrap();
         p.not_after = OffsetDateTime::from_unix_timestamp(NOW + 86_400 * 30).unwrap();
@@ -580,7 +757,6 @@ mod tests {
     fn info(chain: Vec<Vec<u8>>) -> ExternalManifestInfo {
         ExternalManifestInfo {
             cert_chain_der: chain,
-            signing_time_unix: None,
             claim_generator_name: "Test Camera".into(),
             claim_generator_version: Some("5".into()),
             mime: "image/jpeg".into(),
@@ -676,20 +852,17 @@ mod tests {
     }
 
     #[test]
-    fn expired_cert_uses_signing_time_when_present() {
+    fn validity_is_checked_at_the_given_time_only() {
         let pki = new_root("Test Root");
         let s = store(&pki, vec![record(O, CN, 2)]);
         let chain = vec![leaf(&pki, O, CN)];
-        // Current time after expiry, no trusted timestamp.
+        assert!(is_hm(&s.verdict_at(&info(chain.clone()), NOW)));
+        // After expiry: Unknown. No caller-supplied time can rescue it.
         let late = NOW + 86_400 * 365;
         assert!(reason(s.verdict_at(&info(chain.clone()), late)).contains("not valid"));
-        // Trusted timestamp inside the validity window.
-        let mut i = info(chain);
-        i.signing_time_unix = Some(NOW);
-        assert!(is_hm(&s.verdict_at(&i, late)));
-        // Timestamp before the certificate existed.
-        i.signing_time_unix = Some(NOW - 86_400 * 365);
-        assert!(!is_hm(&s.verdict_at(&i, late)));
+        // Before the certificate existed.
+        let early = NOW - 86_400 * 365;
+        assert!(!is_hm(&s.verdict_at(&info(chain), early)));
     }
 
     #[test]
@@ -705,7 +878,192 @@ mod tests {
         ));
     }
 
+    // Leaf and intermediate profile.
+
+    fn eku_leaf(pki: &Pki, eku: Vec<ExtendedKeyUsagePurpose>) -> Vec<u8> {
+        leaf_with(pki, O, CN, |p| p.extended_key_usages = eku)
+    }
+
+    #[test]
+    fn leaf_needs_claim_or_document_signing_eku() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        // rcgen writes a malformed tail when the EKU is empty, so add a
+        // harmless custom extension after it to keep the certificate valid.
+        let none = leaf_with(&pki, O, CN, |p| {
+            p.extended_key_usages = vec![];
+            p.custom_extensions = vec![rcgen::CustomExtension::from_oid_content(
+                &[1, 2, 3, 4],
+                vec![0x05, 0x00],
+            )];
+        });
+        let r = reason(s.verdict_at(&info(vec![none]), NOW));
+        assert!(r.contains("EKU"), "{r}");
+        let server = eku_leaf(&pki, vec![ExtendedKeyUsagePurpose::ServerAuth]);
+        assert!(!is_hm(&s.verdict_at(&info(vec![server]), NOW)));
+        let doc = eku_leaf(
+            &pki,
+            vec![ExtendedKeyUsagePurpose::Other(vec![
+                1, 3, 6, 1, 5, 5, 7, 3, 36,
+            ])],
+        );
+        assert!(is_hm(&s.verdict_at(&info(vec![doc]), NOW)));
+    }
+
+    #[test]
+    fn leaf_needs_digital_signature_key_usage() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let no_ds = leaf_with(&pki, O, CN, |p| {
+            p.key_usages = vec![KeyUsagePurpose::ContentCommitment]
+        });
+        assert!(reason(s.verdict_at(&info(vec![no_ds]), NOW)).contains("digitalSignature"));
+        let none = leaf_with(&pki, O, CN, |p| p.key_usages = vec![]);
+        assert!(!is_hm(&s.verdict_at(&info(vec![none]), NOW)));
+    }
+
+    /// root -> ICA1 (constraint `c1`) -> ICA2 -> leaf.
+    fn two_level_chain(pki: &Pki, c1: IsCa, c2_is_ca: bool) -> Vec<Vec<u8>> {
+        let k1 = KeyPair::generate().unwrap();
+        let mut p1 = params("ICA 1", Some("Test Root"), true);
+        p1.is_ca = c1;
+        let ica1 = p1.signed_by(&k1, &pki.root, &pki.root_key).unwrap();
+        let k2 = KeyPair::generate().unwrap();
+        let mut p2 = params("ICA 2", Some("Test Root"), true);
+        if !c2_is_ca {
+            p2.is_ca = IsCa::NoCa;
+        }
+        let ica2 = p2.signed_by(&k2, &ica1, &k1).unwrap();
+        let kl = KeyPair::generate().unwrap();
+        let leaf = params(CN, Some(O), false)
+            .signed_by(&kl, &ica2, &k2)
+            .unwrap();
+        vec![
+            leaf.der().to_vec(),
+            ica2.der().to_vec(),
+            ica1.der().to_vec(),
+        ]
+    }
+
+    #[test]
+    fn intermediate_must_be_ca_and_respect_path_len() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let ok = two_level_chain(&pki, IsCa::Ca(BasicConstraints::Constrained(1)), true);
+        assert!(is_hm(&s.verdict_at(&info(ok), NOW)));
+        let too_deep = two_level_chain(&pki, IsCa::Ca(BasicConstraints::Constrained(0)), true);
+        assert!(reason(s.verdict_at(&info(too_deep), NOW)).contains("pathLen"));
+        let not_ca = two_level_chain(&pki, IsCa::Ca(BasicConstraints::Unconstrained), false);
+        assert!(reason(s.verdict_at(&info(not_ca), NOW)).contains("not a CA"));
+    }
+
+    #[test]
+    fn anchor_path_len_is_enforced() {
+        // A pathLen=0 anchor cannot sign an intermediate that signs the leaf.
+        let key = KeyPair::generate().unwrap();
+        let mut p = params("Limited Root", Some("Test Root"), true);
+        p.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
+        let root = p.self_signed(&key).unwrap();
+        let pki = Pki {
+            root,
+            root_key: key,
+        };
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let k1 = KeyPair::generate().unwrap();
+        let ica = params("ICA", Some("Test Root"), true)
+            .signed_by(&k1, &pki.root, &pki.root_key)
+            .unwrap();
+        let kl = KeyPair::generate().unwrap();
+        let leaf = params(CN, Some(O), false)
+            .signed_by(&kl, &ica, &k1)
+            .unwrap();
+        let chain = vec![leaf.der().to_vec(), ica.der().to_vec()];
+        assert!(!is_hm(&s.verdict_at(&info(chain), NOW)));
+        // Directly under the root it is fine.
+        assert!(is_hm(&s.verdict_at(&info(vec![leaf_der(&pki)]), NOW)));
+    }
+
+    fn leaf_der(pki: &Pki) -> Vec<u8> {
+        leaf(pki, O, CN)
+    }
+
     // Condition 2: DN and record kind.
+
+    /// DER `Name` with the given (oid, value) attributes, one RDN each.
+    fn name_der(attrs: &[(&[u8], &str)]) -> Vec<u8> {
+        let mut body = Vec::new();
+        for (oid, val) in attrs {
+            let mut atv = vec![0x06, oid.len() as u8];
+            atv.extend_from_slice(oid);
+            atv.extend([0x0c, val.len() as u8]);
+            atv.extend_from_slice(val.as_bytes());
+            let mut seq = vec![0x30, atv.len() as u8];
+            seq.extend(atv);
+            body.extend([0x31, seq.len() as u8]);
+            body.extend(seq);
+        }
+        let mut out = vec![0x30, body.len() as u8];
+        out.extend(body);
+        out
+    }
+
+    fn subject_of(attrs: &[(&[u8], &str)]) -> Result<Subject, String> {
+        let der = name_der(attrs);
+        let (_, name) = X509Name::from_der(&der).unwrap();
+        parse_subject(&name)
+    }
+
+    const OID_O: &[u8] = &[0x55, 0x04, 0x0a];
+    const OID_CN: &[u8] = &[0x55, 0x04, 0x03];
+    const OID_C: &[u8] = &[0x55, 0x04, 0x06];
+    const OID_OU: &[u8] = &[0x55, 0x04, 0x0b];
+
+    #[test]
+    fn subject_needs_exactly_one_o_and_one_cn() {
+        let ok = subject_of(&[(OID_O, "A"), (OID_CN, "B"), (OID_C, "US")]).unwrap();
+        assert_eq!((ok.o.as_str(), ok.cn.as_str()), ("A", "B"));
+        assert!(subject_of(&[(OID_O, "A"), (OID_O, "A2"), (OID_CN, "B")])
+            .unwrap_err()
+            .contains("more than one O"));
+        assert!(subject_of(&[(OID_O, "A"), (OID_CN, "B"), (OID_CN, "B2")])
+            .unwrap_err()
+            .contains("more than one CN"));
+        assert!(subject_of(&[(OID_CN, "B")])
+            .unwrap_err()
+            .contains("lacks O"));
+        assert!(subject_of(&[(OID_O, "A")])
+            .unwrap_err()
+            .contains("lacks CN"));
+        assert!(subject_of(&[(OID_O, "A"), (OID_CN, "B"), (OID_C, "US"), (OID_C, "ES")]).is_err());
+        assert!(subject_of(&[(OID_O, "A"), (OID_CN, "B"), (OID_OU, "x"), (OID_OU, "y")]).is_err());
+    }
+
+    #[test]
+    fn country_and_organizational_unit_must_match_the_record() {
+        let pki = new_root("Test Root");
+        let mut with_ou = record(O, CN, 2);
+        with_ou["product"]["DN"]["OU"] = json!("Hardware");
+        let s = store(&pki, vec![with_ou]);
+        // Record has an OU: the cert must carry the same one.
+        let no_ou = leaf(&pki, O, CN);
+        assert!(reason(s.verdict_at(&info(vec![no_ou]), NOW)).contains("not in the C2PA"));
+        let wrong = leaf_with(&pki, O, CN, |p| {
+            p.distinguished_name
+                .push(DnType::OrganizationalUnitName, "Software")
+        });
+        assert!(!is_hm(&s.verdict_at(&info(vec![wrong]), NOW)));
+        let right = leaf_with(&pki, O, CN, |p| {
+            p.distinguished_name
+                .push(DnType::OrganizationalUnitName, "Hardware")
+        });
+        assert!(is_hm(&s.verdict_at(&info(vec![right]), NOW)));
+        // Country mismatch (record says US).
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let es = leaf_with(&pki, O, CN, |p| {
+            p.distinguished_name.push(DnType::CountryName, "ES")
+        });
+        assert!(reason(s.verdict_at(&info(vec![es]), NOW)).contains("not in the C2PA"));
+    }
 
     #[test]
     fn dn_must_match_o_and_cn() {
@@ -881,7 +1239,115 @@ mod tests {
         assert!(s.eligible_products().is_empty());
     }
 
+    #[test]
+    fn any_other_digital_source_type_is_rejected() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let base = info(vec![leaf(&pki, O, CN)]);
+        assert!(is_hm(&s.verdict_at(&base, NOW)));
+        let base_url = "http://cv.iptc.org/newscodes/digitalsourcetype/";
+        for t in [
+            "trainedAlgorithmicMedia",
+            "compositeWithTrainedAlgorithmicMedia",
+            "algorithmicMedia",
+            "compositeCapture",
+            "digitalCreation",
+            "composite",
+        ] {
+            let mut i = base.clone();
+            i.actions.push(ExternalAction {
+                action: "c2pa.edited".into(),
+                digital_source_type: Some(format!("{base_url}{t}")),
+            });
+            assert!(
+                reason(s.verdict_at(&i, NOW)).contains("not digitalCapture"),
+                "{t}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_one_inception_action_is_allowed() {
+        let pki = new_root("Test Root");
+        let s = store(&pki, vec![record(O, CN, 2)]);
+        let mut i = info(vec![leaf(&pki, O, CN)]);
+        i.actions.push(ExternalAction {
+            action: "c2pa.opened".into(),
+            digital_source_type: None,
+        });
+        assert!(reason(s.verdict_at(&i, NOW)).contains("more than one"));
+        let mut i = info(vec![leaf(&pki, O, CN)]);
+        i.actions.push(i.actions[0].clone());
+        assert!(!is_hm(&s.verdict_at(&i, NOW)));
+    }
+
+    #[test]
+    fn stitched_maps_to_composite_capture_and_labels_ignore_version() {
+        assert_eq!(
+            iptc_equivalent("capturedMediaStitched"),
+            Some("compositeCapture")
+        );
+        assert_eq!(strip_label_version("stds.exif__2"), "stds.exif");
+        assert_eq!(strip_label_version("stds.exif"), "stds.exif");
+        assert_eq!(strip_label_version("a__b"), "a__b");
+        let pki = new_root("Test Root");
+        let mut r = record(O, CN, 2);
+        r["product"]["disallowedSignals"]["transformation"] = json!(["stds.exif"]);
+        let s = store(&pki, vec![r]);
+        let mut i = info(vec![leaf(&pki, O, CN)]);
+        i.assertion_labels.push("stds.exif__2".into());
+        assert!(reason(s.verdict_at(&i, NOW)).contains("stds.exif"));
+        // A stitched-only restriction does not make the product ineligible:
+        // compositeCapture is already rejected for every external capture.
+        let mut r = record(O, CN, 2);
+        r["product"]["disallowedSignals"]["inception"] = json!(["capturedMediaStitched"]);
+        let s = store(&pki, vec![r]);
+        assert_eq!(s.eligible_products().len(), 1);
+    }
+
+    #[test]
+    fn unrecognised_signal_fails_closed() {
+        let pki = new_root("Test Root");
+        let mut r = record(O, CN, 2);
+        r["product"]["disallowedSignals"]["inception"] = json!(["somethingNew"]);
+        let s = store(&pki, vec![r]);
+        let v = s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW);
+        assert!(reason(v).contains("not recognised"));
+        assert!(s.eligible_products().is_empty());
+    }
+
     // Production data.
+
+    #[test]
+    fn python_updater_agrees_on_the_eligible_set() {
+        // scripts/update-c2pa-trust.py decides which products a list update
+        // gains or loses. Its filter must equal this crate's.
+        let script = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/update-c2pa-trust.py"
+        );
+        let out = std::process::Command::new("python3")
+            .args(["-I", script, "--list-eligible"])
+            .output()
+            .expect("python3 is required for the parity test");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let py: Vec<String> = String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let rust: Vec<String> = TrustStore::vendored()
+            .unwrap()
+            .eligible_products()
+            .into_iter()
+            .map(|(o, c)| format!("{o} / {c}"))
+            .collect();
+        assert_eq!(py, rust);
+    }
 
     #[test]
     fn vendored_lock_hashes_match() {

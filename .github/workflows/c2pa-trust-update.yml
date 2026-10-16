@@ -5,15 +5,16 @@ on:
     - cron: "0 6 * * 1" # lunes 06:00 UTC
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  actions: write
+permissions: {}
 
 jobs:
   update:
     name: Actualizar listas oficiales C2PA
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
 
@@ -48,16 +49,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHORT: ${{ steps.prep.outputs.short }}
         run: |
+          # La rama se nombra por el SHA del upstream: mismo SHA, misma rama.
           branch="chore/c2pa-trust-$SHORT"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "La rama $branch ya existe en el remoto. Nada que hacer."
+            exit 0
+          fi
+          if [ -n "$(gh pr list --head "$branch" --state open --json number -q '.[].number')" ]; then
+            echo "Ya hay un PR abierto para $branch. Nada que hacer."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           git add trust/c2pa
           git commit -m "Actualizar listas oficiales C2PA ($SHORT)"
           git push origin "$branch"
-          gh pr create \
+          if ! gh pr create \
             --base "${{ github.event.repository.default_branch }}" \
             --head "$branch" \
             --title "Actualizar listas oficiales C2PA ($SHORT)" \
-            --body-file "$RUNNER_TEMP/body.md"
+            --body-file "$RUNNER_TEMP/body.md"; then
+            echo "::error::No se pudo crear el PR. Si el error dice que GitHub Actions no puede crear PRs, activa el ajuste del repositorio 'Allow GitHub Actions to create and approve pull requests' (Settings > Actions > General > Workflow permissions). La rama $branch ya se ha subido."
+            exit 1
+          fi
           gh workflow run ci.yml --ref "$branch"

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Actualiza las listas oficiales C2PA vendorizadas en trust/c2pa/.
 
-Uso: scripts/update-c2pa-trust.py [COMMIT]
+Uso: scripts/update-c2pa-trust.py [COMMIT | --list-eligible]
+
+--list-eligible imprime, sin red, los productos elegibles de los ficheros ya
+vendorizados (lo usa el test de paridad con Rust).
 
 COMMIT es un SHA (corto o completo) de c2pa-org/conformance-public. Sin
 argumento usa el ultimo commit de main. Descarga los tres ficheros desde
@@ -69,21 +72,39 @@ def verify(name, data):
     return "%d registros" % len(records)
 
 
+# Debe coincidir con signal_recognised / signal_matches_capture de Rust.
+KNOWN_SIGNALS = {"capturedMedia", "capturedMediaStitched", "nonGenAIDigitalCreation", "digitalCapture"}
+CAPTURE_SIGNALS = {"capturedMedia", "digitalCapture"}
+
+
+def eligible_record(r):
+    """Misma regla que TrustStore::eligible_products en Rust (condiciones 2, 3 y 5).
+
+    Se miran inception y transformation. Una senal que el codigo no reconoce
+    (ni nombre conocido ni etiqueta con punto, p. ej. c2pa.resized) descarta el
+    producto: falla cerrado, igual que Rust.
+    """
+    p = r["product"]
+    level = (p.get("assurance") or {}).get("maxAssuranceLevel") or 0
+    ds = p.get("disallowedSignals") or {}
+    signals = (ds.get("inception") or []) + (ds.get("transformation") or [])
+    return (
+        r.get("status") == "conformant"
+        and p.get("productType") == "generatorProduct"
+        and level >= MIN_ASSURANCE
+        and all(s in KNOWN_SIGNALS or "." in s for s in signals)
+        and not any(s in CAPTURE_SIGNALS for s in signals)
+    )
+
+
 def eligible(data):
-    """Productos (O, CN) elegibles segun la regla externa (condiciones 2, 3 y 5)."""
+    """Productos (O, CN) elegibles como camara externa."""
     out = {}
     if data is None:
         return out
     for r in json.loads(data.decode("utf-8")):
-        p = r["product"]
-        level = (p.get("assurance") or {}).get("maxAssuranceLevel") or 0
-        dis = (p.get("disallowedSignals") or {}).get("inception") or []
-        if (
-            r.get("status") == "conformant"
-            and p.get("productType") == "generatorProduct"
-            and level >= MIN_ASSURANCE
-            and "capturedMedia" not in dis
-        ):
+        if eligible_record(r):
+            p = r["product"]
             dn = p["DN"]
             out.setdefault((dn.get("O", ""), dn.get("CN", "")), []).append(p.get("minVersion") or "-")
     return out
@@ -98,6 +119,11 @@ def read(path):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--list-eligible":
+        # Sin red: lista el conjunto elegible de los ficheros vendorizados.
+        for o, cn in sorted(eligible(read(os.path.join(OUT, "conforming-products-list.json")))):
+            print("%s / %s" % (o, cn))
+        return
     ref = sys.argv[1] if len(sys.argv) > 1 else "main"
     sha = resolve(ref)
     print("commit: %s" % sha, file=sys.stderr)
