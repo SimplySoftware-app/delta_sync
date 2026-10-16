@@ -3,14 +3,16 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Error))]
 pub enum CoreError {
-    #[error("{message}")]
-    Message { message: String },
+    // The field is not called `message`: in the generated Kotlin it would clash
+    // with `Throwable.message`.
+    #[error("{reason}")]
+    Message { reason: String },
 }
 
 impl CoreError {
     pub fn msg(message: impl Into<String>) -> Self {
         Self::Message {
-            message: message.into(),
+            reason: message.into(),
         }
     }
 }

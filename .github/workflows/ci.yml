@@ -24,11 +24,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # The app links the Rust core (sdk/kotlin), built for Android with cargo-ndk.
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked --version 4.1.2
       # v3 defaults to `sdkmanager tools`, which Google no longer publishes.
       # v4 skips that package; pin the SDK pieces assembleDebug actually needs.
       - uses: android-actions/setup-android@v4
         with:
-          packages: platform-tools platforms;android-36 build-tools;35.0.0
-      - name: Assemble debug
+          packages: platform-tools platforms;android-36 build-tools;35.0.0 ndk;27.2.12479018
+      - name: Assemble debug, build the AAR, run the JVM tests
         working-directory: android
-        run: chmod +x gradlew && ./gradlew :app:assembleDebug --stacktrace --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug :sdk:assembleRelease :sdk:testDebugUnitTest --stacktrace --no-daemon

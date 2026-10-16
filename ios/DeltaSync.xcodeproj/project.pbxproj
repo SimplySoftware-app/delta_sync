@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000000000000000000001 /* C2PA in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* C2PA */; };
+		A10000000000000000000001 /* DeltaSyncCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* DeltaSyncCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,7 +45,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000001 /* C2PA in Frameworks */,
+				A10000000000000000000001 /* DeltaSyncCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,7 +87,7 @@
 			);
 			name = DeltaSync;
 			packageProductDependencies = (
-				A10000000000000000000002 /* C2PA */,
+				A10000000000000000000002 /* DeltaSyncCore */,
 			);
 			productName = DeltaSync;
 			productReference = A10000000000000000000008 /* DeltaSync.app */;
@@ -117,7 +117,7 @@
 			mainGroup = A1000000000000000000000B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A10000000000000000000009 /* XCRemoteSwiftPackageReference "c2pa-swift" */,
+				A10000000000000000000009 /* XCLocalSwiftPackageReference "../sdk/swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1000000000000000000000C /* Products */;
@@ -251,22 +251,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		A10000000000000000000009 /* XCRemoteSwiftPackageReference "c2pa-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/contentauth/c2pa-swift.git";
-			requirement = {
-				kind = exactVersion;
-				version = 0.0.14;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		A10000000000000000000009 /* XCLocalSwiftPackageReference "../sdk/swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../sdk/swift;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A10000000000000000000002 /* C2PA */ = {
+		A10000000000000000000002 /* DeltaSyncCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000009 /* XCRemoteSwiftPackageReference "c2pa-swift" */;
-			productName = C2PA;
+			productName = DeltaSyncCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

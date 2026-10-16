@@ -1,0 +1,5 @@
+# Produced by scripts/build-xcframework.sh
+/DeltaSyncCoreFFI.xcframework
+/Sources/DeltaSyncCore/Generated/
+/.build/
+/.swiftpm/

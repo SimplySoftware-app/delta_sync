@@ -23,9 +23,10 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camera" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camera" }
 play-integrity = { group = "com.google.android.play", name = "integrity", version.ref = "integrity" }
-c2pa = { group = "com.github.contentauth", name = "c2pa-android", version = "0.0.14" }
+junit = { group = "junit", name = "junit", version = "4.13.2" }
 
 [plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

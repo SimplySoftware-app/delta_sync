@@ -11,9 +11,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }
     }
 }
 
 rootProject.name = "DeltaSync"
 include(":app")
+
+// Delta Sync core for Android (AAR): `./gradlew :sdk:assembleRelease`.
+include(":sdk")
+project(":sdk").projectDir = file("../sdk/kotlin")

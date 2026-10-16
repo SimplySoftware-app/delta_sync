@@ -1000,8 +1000,11 @@ dependencies = [
 name = "delta_sync_core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "c2pa",
  "ed25519-dalek",
+ "p256",
+ "rand_core 0.6.4",
  "rcgen",
  "serde",
  "serde_json",

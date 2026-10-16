@@ -1,3 +1,4 @@
+import DeltaSyncCore
 import Foundation
 
 @MainActor
@@ -15,7 +16,7 @@ final class CaptureModel: ObservableObject {
     @Published var backing = ""
 
     private var identity: DeviceIdentity?
-    private var certificateChain: String?
+    private var signer: SecureEnclaveDeviceSigner?
     let camera = CameraSession()
 
     init() {
@@ -31,7 +32,9 @@ final class CaptureModel: ObservableObject {
             let identity = try DeviceIdentity.loadOrCreate(allowSoftwareFallback: self.allowSoftwareKey)
             self.identity = identity
             self.backing = identity.backing.rawValue
-            let (csr, point) = try Csr.make(privateKey: identity.privateKey, commonName: "DeltaSync device")
+            let signer = SecureEnclaveDeviceSigner(privateKey: identity.privateKey)
+            let csr = try signer.makeCsr(commonName: "DeltaSync device")
+            let point = try signer.publicKeyPoint()
             let authority = SigningAuthority(baseURL: base)
             let challenge = try await authority.challenge()
             var keyId: String?
@@ -48,20 +51,21 @@ final class CaptureModel: ObservableObject {
                 keyId: keyId,
                 attestation: attestation
             )
-            self.certificateChain = issued.certificateChainPem
+            signer.setCertificateChain(issued.certificateChainPem)
+            self.signer = signer
             self.status = "\(identity.backing.rawValue). Certificate expires \(issued.expiresAt). \(issued.attestation.detail)"
         }
     }
 
     func captureAndSign() async {
         await run("Capturing…") {
-            guard let identity = self.identity, let chain = self.certificateChain else {
+            guard let identity = self.identity, let signer = self.signer else {
                 throw ManifestError.signing("Prepare the device before capturing.")
             }
             try await self.camera.start()
             let jpeg = try await self.camera.capture()
             self.status = "Signing the capture…"
-            let signed = try ManifestSigner.signJpeg(jpeg, certificateChainPEM: chain, identity: identity)
+            let signed = try ManifestSigner.signJpeg(jpeg, signer: signer)
             self.signedPhoto = signed
             self.status = "Signed \(signed.count) bytes with the \(identity.backing.rawValue) key."
         }

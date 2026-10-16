@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.deltasync.core.KeystoreDeviceSigner
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.IntegrityTokenRequest
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,7 @@ class CaptureViewModel(application: Application) : AndroidViewModel(application)
     )
     val state: StateFlow<CaptureUiState> = _state.asStateFlow()
 
-    private var chainPem: String? = null
+    private var signer: KeystoreDeviceSigner? = null
 
     fun updateServer(value: String) = update("serverUrl", value) { copy(serverUrl = value) }
     fun updateProject(value: String) = update("cloudProjectNumber", value) { copy(cloudProjectNumber = value) }
@@ -60,7 +61,8 @@ class CaptureViewModel(application: Application) : AndroidViewModel(application)
                 packageName = getApplication<Application>().packageName,
                 integrityToken = token,
             )
-            chainPem = issued.certificateChainPem
+            key.signer.setCertificateChain(issued.certificateChainPem)
+            signer = key.signer
             _state.update {
                 it.copy(
                     backing = key.backing,
@@ -76,10 +78,10 @@ class CaptureViewModel(application: Application) : AndroidViewModel(application)
 
     fun sign(jpeg: ByteArray) {
         launch("Signing the capture…") {
-            val chain = chainPem ?: error("Prepare the device before capturing.")
+            val deviceSigner = signer ?: error("Prepare the device before capturing.")
             val file = File(getApplication<Application>().cacheDir, "deltasync-signed.jpg")
             withContext(Dispatchers.IO) {
-                ManifestSigner.signJpeg(jpeg, chain, DeviceKey.ALIAS, file)
+                ManifestSigner.signJpeg(jpeg, deviceSigner, file)
             }
             _state.update {
                 it.copy(

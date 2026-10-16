@@ -1,4 +1,4 @@
-import C2PA
+import DeltaSyncCore
 import Foundation
 import Security
 
@@ -29,12 +29,8 @@ struct DeviceIdentity {
     let privateKey: SecKey
 
     static func loadOrCreate(allowSoftwareFallback: Bool) throws -> DeviceIdentity {
-        if let key = copyKey(tag: enclaveTag, secureEnclave: true) {
-            return DeviceIdentity(backing: .secureEnclave, privateKey: key)
-        }
         do {
-            let config = SecureEnclaveSignerConfig(keyTag: enclaveTag)
-            let key = try Signer.createSecureEnclaveKey(config: config)
+            let key = try SecureEnclaveDeviceSigner.loadOrCreateKey(tag: enclaveTag)
             return DeviceIdentity(backing: .secureEnclave, privateKey: key)
         } catch {
             guard allowSoftwareFallback else {
@@ -77,7 +73,8 @@ struct DeviceIdentity {
         ]
         var error: Unmanaged<CFError>?
         guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
-            let status = (error?.takeRetainedValue() as Error? as NSError?)?.code ?? errSecParam
+            let code = (error?.takeRetainedValue() as Error? as NSError?)?.code
+            let status = code.map { OSStatus(truncatingIfNeeded: $0) } ?? errSecParam
             throw IdentityError.softwareKey(status)
         }
         return key
