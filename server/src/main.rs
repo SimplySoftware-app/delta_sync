@@ -17,6 +17,12 @@ async fn main() -> anyhow::Result<()> {
             "ATTESTATION_MODE=stub. Device certificates will be issued without App Attest or Play Integrity. Do not use this on a public host."
         );
     }
+    if config.seal_token.is_none() {
+        tracing::warn!("MEDIA_SEAL_TOKEN is not set. /internal/seal answers 503.");
+    }
+    if config.tsa_url.is_none() {
+        tracing::warn!("TSA_URL is off. Service seals carry no RFC 3161 time-stamp.");
+    }
     let listen = config.listen_addr.clone();
     let state = Arc::new(AppState::new(config)?);
     tracing::info!(

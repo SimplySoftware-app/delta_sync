@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Multipart, State},
+    extract::{DefaultBodyLimit, Multipart, State},
+    http::HeaderMap,
     routing::{get, post},
     Json, Router,
 };
+use delta_sync_core::LabelVerdict;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -19,14 +21,24 @@ use crate::{
     AppState,
 };
 
-const MAX_UPLOAD: usize = 64 * 1024 * 1024;
+/// Two 32 MiB assets plus the multipart framing of `/internal/seal`.
+const MAX_UPLOAD: usize = 70 * 1024 * 1024;
 
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/health", get(health))
         .route("/v1/challenge", post(challenge))
         .route("/v1/device-certificate", post(issue_certificate))
+        .route("/v1/verify", post(verify_label))
         .route("/verify", post(verify))
+        .route("/internal/seal", post(crate::seal::seal));
+    // The migration route for clients that still send a bare public key and a
+    // stub attestation. It does not exist outside ATTESTATION_MODE=stub.
+    if state.config.attestation_mode == AttestationMode::Stub {
+        router = router.route("/v1/enroll", post(enroll_stub));
+    }
+    router
+        .layer(DefaultBodyLimit::max(MAX_UPLOAD))
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD))
         .with_state(state)
 }
@@ -37,6 +49,10 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<Value> {
         "service": "delta-sync",
         "attestation_mode": state.config.attestation_mode.as_str(),
         "ca_fingerprint_sha256": state.ca.fingerprint_sha256(),
+        "device_ica_fingerprint_sha256": state.ca.device_ica_fingerprint_sha256(),
+        "service_ica_fingerprint_sha256": state.ca.service_ica_fingerprint_sha256(),
+        "seal_enabled": state.config.seal_token.is_some(),
+        "tsa_enabled": state.config.tsa_url.is_some(),
     }))
 }
 
@@ -130,7 +146,8 @@ async fn issue_certificate(
     Ok(Json(json!({
         "certificate_pem": issued.certificate_pem,
         "certificate_chain_pem": issued.certificate_chain_pem,
-        "ca_pem": state.ca.certificate_pem(),
+        "ca_pem": state.ca.root_pem(),
+        "device_ica_pem": state.ca.device_ica_pem(),
         "expires_at": issued.expires_at.format(&time::format_description::well_known::Rfc3339).unwrap_or_else(|_| "unknown".into()),
         "serial_hex": issued.serial_hex,
         "attestation": outcome,
@@ -245,7 +262,7 @@ async fn verify(
     let format = sniff_format(&bytes, &filename).ok_or_else(|| {
         ApiError::bad_request("unsupported file type. Send a JPEG, PNG, WebP, or MP4.")
     })?;
-    let result = verify_asset::verify_bytes(&bytes, format, state.ca.certificate_pem())
+    let result = verify_asset::verify_bytes(&bytes, format, state.ca.root_pem())
         .map_err(ApiError::bad_request)?;
     Ok(Json(json!({
         "manifest_found": result.manifest_found,
@@ -256,5 +273,80 @@ async fn verify(
         "validation_results": result.validation_results,
         "detail": result.detail,
         "trusted_ca_fingerprint_sha256": state.ca.fingerprint_sha256(),
+    })))
+}
+
+/// `POST /v1/verify`: the raw asset as the body, `x-mime-type` and optionally
+/// `x-self-declared-ai: true`. Answers with the HM / AI / Unknown verdict. An
+/// unreadable asset is a verdict (Unknown), not an error.
+async fn verify_label(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<Json<LabelVerdict>, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError::bad_request("the request body is empty"));
+    }
+    let mime = headers
+        .get("x-mime-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(';').next().unwrap_or(v).trim().to_ascii_lowercase())
+        .filter(|v| !v.is_empty())
+        .or_else(|| sniff_format(&body, "").map(str::to_string))
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let declared_ai = headers
+        .get("x-self-declared-ai")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v == "true" || v == "1");
+    let verdict = tokio::task::spawn_blocking(move || {
+        delta_sync_core::verify_bytes(&body, &mime, state.ca.root_pem(), declared_ai)
+    })
+    .await
+    .map_err(ApiError::internal)?;
+    Ok(Json(verdict))
+}
+
+#[derive(Deserialize)]
+struct EnrollRequest {
+    platform: String,
+    app_id: String,
+    public_key_pem: String,
+    attestation: String,
+}
+
+/// Deprecated. `ATTESTATION_MODE=stub` only. Issues a device certificate for a
+/// bare public key and a non-empty attestation blob that nothing checks. Use
+/// `/v1/challenge` and `/v1/device-certificate`.
+async fn enroll_stub(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<EnrollRequest>,
+) -> Result<Json<Value>, ApiError> {
+    if Platform::parse(&body.platform).is_none() {
+        return Err(ApiError::bad_request("platform must be ios or android"));
+    }
+    if body.attestation.trim().is_empty() {
+        return Err(ApiError::Forbidden("attestation is required".into()));
+    }
+    if body.app_id.trim().is_empty() || body.public_key_pem.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "app_id and public_key_pem are required",
+        ));
+    }
+    let issued = state
+        .ca
+        .issue_for_public_key(
+            &body.public_key_pem,
+            &body.platform,
+            body.app_id.trim(),
+            state.config.device_cert_ttl,
+        )
+        .map_err(ApiError::bad_request)?;
+    Ok(Json(json!({
+        "certificate_pem": issued.certificate_pem,
+        "certificate_chain_pem": issued.certificate_chain_pem,
+        "ca_pem": state.ca.root_pem(),
+        "device_ica_pem": state.ca.device_ica_pem(),
+        "expires_at_unix": issued.expires_at.unix_timestamp(),
+        "deprecated": "use /v1/challenge and /v1/device-certificate",
     })))
 }

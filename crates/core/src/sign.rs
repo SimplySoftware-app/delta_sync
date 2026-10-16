@@ -14,6 +14,9 @@ use crate::error::CoreError;
 use crate::label::{self, LabelVerdict};
 use crate::{GENERATOR_NAME, VERSION};
 
+/// `c2pa-kp-claimSigning`, the EKU on every certificate the authority issues.
+const CLAIM_SIGNING_EKU_OID: &str = "1.3.6.1.4.1.62558.2.1";
+
 pub fn sign_capture(
     asset: &[u8],
     mime: &str,
@@ -240,6 +243,9 @@ fn read_report(
 fn verification_context(ca_pem: &str) -> Result<Context, CoreError> {
     let settings = json!({
         "trust": {
+            // The verifier only accepts the EKUs it is told about.
+            // c2pa-kp-claimSigning is what the Delta Sync authority issues.
+            "trust_config": CLAIM_SIGNING_EKU_OID,
             "anchors": [{
                 "trust_anchors": ca_pem,
                 "trust_kind": "manifest"

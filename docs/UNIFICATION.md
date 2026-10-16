@@ -10,11 +10,11 @@ estos 5 PR.
 
 | PR | Contenido | Estado |
 |---|---|---|
-| 1 | Workspace Cargo (`server`, `crates/core`). Importa el núcleo Rust de Social (`delta_sync_core`) sin cambios de comportamiento, con sus tests. CI ejecuta `cargo test --workspace --locked`. Arregla el test inestable `live_mode_rejects_a_fake_attestation`. Licencia Apache-2.0 en todos los `Cargo.toml`. | Este PR |
-| 2 | PKI propia: root offline, Device ICA y Service ICA. EKU `c2pa-kp-claimSigning` (1.3.6.1.4.1.62558.2.1) en lugar de emailProtection. TTL máximo del cert de dispositivo de 24 h (por defecto 15 min, configurable). TSA RFC 3161 externa y configurable (por defecto `http://timestamp.digicert.com`), opcional y simulada en tests. | Pendiente |
-| 3 | Sello del servidor: el servicio firma ediciones y derivados con el cert del Service ICA dentro del manifest del derivado (`parentOf` = original). Solo si el original verifica como HM bajo la Device ICA. | Pendiente |
-| 4 | Acciones: mute como `c2pa.edited` con descripción "audio removed" (añadida a las acciones permitidas), cover registrado como acción y póster firmado como derivado propio. | Pendiente |
-| 5 | Firma de captura con clave en hardware (Secure Enclave / StrongBox) mediante un trait `DeviceSigner` y API basada en ficheros (`sign_capture_file`), con soporte de vídeo. | Pendiente |
+| 1 | Workspace Cargo (`server`, `crates/core`). Importa el núcleo Rust de Social (`delta_sync_core`) sin cambios de comportamiento, con sus tests. CI ejecuta `cargo test --workspace --locked`. Arregla el test inestable `live_mode_rejects_a_fake_attestation`. Licencia Apache-2.0 en todos los `Cargo.toml`. | Hecho |
+| 2 | Autoridad: root, Device ICA y Service ICA (P-256), EKU `c2pa-kp-claimSigning` (1.3.6.1.4.1.62558.2.1) en lugar de emailProtection, cert de dispositivo de 24 h como máximo (por defecto 15 min), clave de servicio persistente, TSA RFC 3161 externa y configurable (por defecto `http://timestamp.digicert.com`; los tests no usan red), `POST /internal/seal` (el servicio firma derivados y ediciones con el cert del Service ICA, `parentOf` = original, solo si el original es una captura HM bajo la Device ICA), `POST /v1/verify` con el `LabelVerdict`. `/v1/enroll` solo con `ATTESTATION_MODE=stub`. | Este PR |
+| 3 | Trait `DeviceSigner` (Secure Enclave / StrongBox) y `sign_capture_file` en el core; las apps de demo usan el core por UniFFI. JPEG, MOV y MP4. | Pendiente |
+| 4 | Reglas de etiqueta por ICA, mute como `c2pa.edited` con descripción "audio removed" (añadida a las acciones permitidas), cover registrado como acción y póster firmado como derivado propio, TSA en la firma del dispositivo, BMFF con merkle. Fixtures de vídeo. | Pendiente |
+| 5 | CI de release: XCFramework, AAR y etiqueta. | Pendiente |
 
 ## Decisiones aprobadas
 
@@ -24,7 +24,7 @@ estos 5 PR.
 - Cert de dispositivo de 24 h como máximo.
 - Social consume `delta_sync` como dependencia Cargo por git fijada a una etiqueta.
 
-## Estructura tras el PR 1
+## Estructura
 
 ```
 Cargo.toml          # workspace

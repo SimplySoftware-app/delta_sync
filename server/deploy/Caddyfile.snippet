@@ -2,5 +2,13 @@
 # The site address is whatever name you point at the Hetzner host.
 
 verify.deltasync.simplysoftware.app {
-	reverse_proxy delta-sync:8080
+	# /internal/* is for the media processor on the private Docker network
+	# (http://delta-sync:8080/internal/seal). MEDIA_SEAL_TOKEN protects it, but it
+	# should not be reachable from the internet at all.
+	handle /internal/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy delta-sync:8080
+	}
 }
