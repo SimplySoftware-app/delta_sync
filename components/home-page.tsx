@@ -1,4 +1,3 @@
-import { Fragment } from "react"
 import {
   ArrowDown,
   ArrowRight,
@@ -10,6 +9,7 @@ import {
   TabletSmartphone,
 } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { links, type ChromeCopy, type HomeCopy } from "@/lib/copy"
 
@@ -49,56 +49,70 @@ export function HomePage({
           </a>
           {copy.leadAfter}
         </p>
+        <div className="pt-2">
+          <Button asChild>
+            <a href={links.verify} target="_blank" rel="noopener noreferrer">
+              {copy.cta}
+              {newTab}
+            </a>
+          </Button>
+        </div>
       </section>
 
       <section id="pillars" className="flex scroll-mt-24 flex-col gap-6">
-        <h2 className="text-2xl font-medium tracking-tight text-foreground">
-          {copy.pillarsTitle}
-        </h2>
-        <p className="max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground">
-          {copy.nameLine}
-        </p>
+        <div className="flex flex-col gap-2">
+          <h2 className="text-2xl font-medium tracking-tight text-foreground">
+            {copy.pillarsTitle}
+          </h2>
+          <p className="max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground">
+            {copy.nameLine}
+          </p>
+        </div>
         <ol
           aria-label={copy.diagramLabel}
-          className="flex flex-col items-stretch gap-2 md:flex-row md:items-stretch md:gap-3"
+          className="flex flex-col gap-2 md:grid md:grid-cols-3 md:gap-20"
         >
           {copy.pillars.map((pillar, index) => {
             const Icon = pillarIcons[index] ?? ShieldCheck
             return (
-              <Fragment key={pillar.name}>
-                <li className="md:flex-1">
-                  <Card className="h-full">
-                    <CardHeader>
-                      <CardTitle className="text-base font-medium">
-                        <h3 className="flex items-center gap-3">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-border bg-muted text-foreground">
-                            <Icon className="size-5" aria-hidden="true" />
-                          </span>
-                          <span>
-                            <span className="text-muted-foreground">
-                              {index + 1} ·{" "}
-                            </span>
-                            {pillar.title}
-                          </span>
-                        </h3>
-                      </CardTitle>
-                      <CardDescription className="text-sm leading-relaxed text-pretty">
-                        {pillar.body}
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                </li>
-                {index < copy.pillars.length - 1 && (
-                  <li
+              <li key={pillar.name} className="relative flex flex-col gap-2">
+                {index > 0 && (
+                  <div
                     aria-hidden="true"
-                    className="flex flex-row items-center justify-center gap-2 py-1 text-sm font-medium text-muted-foreground md:flex-col md:py-0"
+                    className="flex flex-row items-center justify-center gap-2 py-1 text-sm font-medium text-muted-foreground md:absolute md:top-1/2 md:right-full md:w-20 md:-translate-y-1/2 md:flex-col md:gap-1 md:py-0 md:text-center md:text-xs"
                   >
-                    <span>{copy.edgeLabels[index]}</span>
+                    <span>{copy.edgeLabels[index - 1]}</span>
                     <ArrowDown className="size-4 md:hidden" />
                     <ArrowRight className="hidden size-4 md:block" />
-                  </li>
+                  </div>
                 )}
-              </Fragment>
+                <Card className="h-full">
+                  <CardHeader>
+                    <CardTitle className="text-base font-medium">
+                      <h3 className="flex items-center gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-border bg-muted text-foreground">
+                          <Icon className="size-5" aria-hidden="true" />
+                        </span>
+                        <span>{pillar.title}</span>
+                      </h3>
+                    </CardTitle>
+                    <CardDescription className="text-sm leading-relaxed text-pretty">
+                      {pillar.body}
+                    </CardDescription>
+                    {pillar.action && (
+                      <a
+                        href={pillar.action.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${linkClass} w-fit text-sm`}
+                      >
+                        {pillar.action.label}
+                        {newTab}
+                      </a>
+                    )}
+                  </CardHeader>
+                </Card>
+              </li>
             )
           })}
         </ol>
