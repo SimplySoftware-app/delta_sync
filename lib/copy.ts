@@ -246,19 +246,19 @@ const es: Dictionary = {
       {
         title: "Servidor en Rust",
         body: "Basado en c2pa-rs. Emite el certificado y comprueba el archivo.",
-        label: "Based on: c2pa-rs",
+        label: "Basado en: c2pa-rs",
         href: links.c2paRs,
       },
       {
         title: "SDK de iOS",
         body: "Basado en c2pa-swift. Swift, Secure Enclave y App Attest.",
-        label: "Based on: c2pa-swift",
+        label: "Basado en: c2pa-swift",
         href: links.c2paSwift,
       },
       {
         title: "SDK de Android",
         body: "Basado en c2pa-android. Kotlin, StrongBox y Play Integrity.",
-        label: "Based on: c2pa-android",
+        label: "Basado en: c2pa-android",
         href: links.c2paAndroid,
       },
     ],
