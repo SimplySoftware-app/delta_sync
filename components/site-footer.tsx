@@ -13,6 +13,12 @@ export function SiteFooter({ copy }: { copy: ChromeCopy }) {
         >
           {copy.credit}
         </a>
+        <a
+          href={`mailto:${links.contact}`}
+          className="w-fit rounded-[10px] text-sm text-muted-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {links.contact}
+        </a>
       </div>
     </footer>
   )

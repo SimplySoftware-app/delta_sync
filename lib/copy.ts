@@ -5,6 +5,7 @@ const SITE = "https://deltasync.simplysoftware.app"
 export const links = {
   c2pa: "https://c2pa.org/",
   simply: "https://simplysoftware.app",
+  contact: "info@simplysoftware.app",
   repo: "https://github.com/carlosedm10/delta_sync",
   verify:
     "https://github.com/carlosedm10/delta_sync/blob/main/server/README.md#verify-a-photo",
@@ -156,7 +157,7 @@ const en: Dictionary = {
     packages: [
       {
         title: "Rust server",
-        body: "Built on c2pa-rs. Issues the certificate and checks the file.",
+        body: "Issues the certificate and checks the file.",
         label: "Based on: c2pa-rs",
         href: links.c2paRs,
         repoLabel: "Source: server/",
@@ -164,7 +165,7 @@ const en: Dictionary = {
       },
       {
         title: "iOS SDK",
-        body: "Built on c2pa-swift. Swift, Secure Enclave and App Attest.",
+        body: "Swift, Secure Enclave and App Attest.",
         label: "Based on: c2pa-swift",
         href: links.c2paSwift,
         repoLabel: "Source: ios/",
@@ -172,7 +173,7 @@ const en: Dictionary = {
       },
       {
         title: "Android SDK",
-        body: "Built on c2pa-android. Kotlin, StrongBox and Play Integrity.",
+        body: "Kotlin, StrongBox and Play Integrity.",
         label: "Based on: c2pa-android",
         href: links.c2paAndroid,
         repoLabel: "Source: android/",
@@ -231,7 +232,7 @@ const es: Dictionary = {
       "SDKs de código abierto y un protocolo basado en C2PA. El teléfono firma una foto con una clave que se queda en el dispositivo, y cualquiera puede comprobar esa firma después.",
     title: "Origen verificable de tus fotos, en código abierto.",
     leadBefore:
-      "Una foto firmada en el teléfono que tú puedes comprobar después. Basado en el estándar ",
+      "Una foto firmada en el teléfono que puedes comprobar después. Todo basado en el estándar ",
     leadLink: "C2PA",
     leadAfter: ".",
     cta: "Cómo comprobar una foto",
@@ -264,7 +265,7 @@ const es: Dictionary = {
     packages: [
       {
         title: "Servidor en Rust",
-        body: "Basado en c2pa-rs. Emite el certificado y comprueba el archivo.",
+        body: "Emite el certificado y comprueba el archivo.",
         label: "Basado en: c2pa-rs",
         href: links.c2paRs,
         repoLabel: "Código: server/",
@@ -272,7 +273,7 @@ const es: Dictionary = {
       },
       {
         title: "SDK de iOS",
-        body: "Basado en c2pa-swift. Swift, Secure Enclave y App Attest.",
+        body: "Swift, Secure Enclave y App Attest.",
         label: "Basado en: c2pa-swift",
         href: links.c2paSwift,
         repoLabel: "Código: ios/",
@@ -280,7 +281,7 @@ const es: Dictionary = {
       },
       {
         title: "SDK de Android",
-        body: "Basado en c2pa-android. Kotlin, StrongBox y Play Integrity.",
+        body: "Kotlin, StrongBox y Play Integrity.",
         label: "Basado en: c2pa-android",
         href: links.c2paAndroid,
         repoLabel: "Código: android/",
