@@ -2098,6 +2098,52 @@ mod tests {
         );
     }
 
+    #[test]
+    fn label_rule_6_end_to_end() {
+        // Verdict (rules 1-5, including the issuer binding) -> record ->
+        // label (rule 6), over a test PKI.
+        use crate::label::{
+            assign_label, external_record_from, ActionRecord, CredentialReport, ManifestRecord,
+            SignerRole,
+        };
+        let acme = new_root("Acme Root");
+        let rogue = new_root("Rogue Root");
+        let s = store_with(
+            vec![(O, &acme), ("Rogue Phones", &rogue)],
+            vec![record(O, CN, 2)],
+            json!({"products": []}),
+        );
+        let label_for = |chain: Vec<u8>, seal: Vec<&str>| {
+            let i = info(vec![chain]);
+            let capture = external_record_from("urn:capture", &i, s.verdict_at(&i, NOW));
+            let seal = ManifestRecord {
+                id: "urn:seal".into(),
+                role: SignerRole::Service,
+                actions: seal
+                    .into_iter()
+                    .map(|a| ActionRecord {
+                        action: a.into(),
+                        ..ActionRecord::default()
+                    })
+                    .collect(),
+                external: None,
+            };
+            assign_label(&CredentialReport {
+                embedded: true,
+                manifests: vec![seal, capture],
+                ..CredentialReport::default()
+            })
+        };
+        let ok = label_for(leaf(&acme, O, CN), vec!["c2pa.opened", "c2pa.transcoded"]);
+        assert_eq!(ok.label, "HM", "{ok:?}");
+        assert!(ok.summary.contains(CN), "{ok:?}");
+        let edited = label_for(leaf(&acme, O, CN), vec!["c2pa.opened", "c2pa.placed"]);
+        assert_eq!(edited.label, "Unknown");
+        let forged = label_for(leaf(&rogue, O, CN), vec!["c2pa.opened"]);
+        assert_eq!(forged.label, "Unknown");
+        assert!(forged.reasons.contains(&"signer_not_ours".to_string()));
+    }
+
     // Production data.
 
     /// Eligible `O / CN` lines from scripts/update-c2pa-trust.py, optionally
