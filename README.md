@@ -1,20 +1,12 @@
-# DeltaSync - Authentic Content Protocol
+# DeltaSync
 
 DeltaSync is open-source media provenance built on C2PA. A Rust signing authority (c2pa-rs) issues short-lived device certificates after App Attest or Play Integrity checks, and runs in stub mode locally without those checks. The iOS and Android capture apps sign JPEGs on the device, and anyone can verify a file with the server's `/verify` endpoint.
 
 ## Features
 
-- **Device Capture Signing**: The iOS and Android apps sign captured JPEGs with a key held in secure hardware
+- **Device Capture Signing**: The iOS and Android apps sign captured JPEGs with a device-held key (Secure Enclave on iOS; StrongBox or hardware keystore on Android when available, otherwise a software keystore)
 - **Content Hash in the Manifest**: The C2PA manifest records a hash of the signed asset, so a changed file fails verification
 - **Public Verification**: `POST /verify` reads a C2PA manifest and reports whether it was issued by the DeltaSync CA
-
-## Core Principles
-
-1. **Small Load** - Minimal processing overhead
-2. **Encapsulation** - Permanent cryptographic linking
-3. **Generalized** - Cross-platform implementation
-4. **Master's Approval** - Governed partnership model
-5. **Categorization** - Clear content type definitions
 
 ## Getting Started
 
