@@ -18,7 +18,6 @@ type NavItem = {
 export type Pillar = {
   name: string
   title: string
-  short: string
   body: string
 }
 
@@ -119,46 +118,43 @@ const en: Dictionary = {
     leadAfter: ".",
     pillarsTitle: "Three pillars",
     nameLine:
-      "“Delta” is every change a photo goes through after it is taken. “Sync” is the proof travelling with it.",
-    diagramLabel: "Certificate, us, you: how the proof travels",
-    edgeLabels: ["signs", "verifies"],
+      "“Delta” is every change a photo goes through after it is taken. “Sync” is the proof travelling with it: we issue the certificate, it signs each delta, and you sync the proof when you check the file.",
+    diagramLabel: "Us, certificate, you: how the proof travels",
+    edgeLabels: ["issues", "signs"],
     pillars: [
-      {
-        name: "Certificate",
-        title: "Certificate",
-        short: "Signs on the phone",
-        body: "The phone signs the photo with a key that stays on the device, in the secure chip when there is one, and a certificate that lasts 15 minutes.",
-      },
       {
         name: "Us",
         title: "Us",
-        short: "Issues the certificate",
-        body: "DeltaSync issues that certificate after checking the device. The code is open, so anyone can audit it.",
+        body: "DeltaSync checks the device and issues a certificate that lasts 15 minutes. The code is open, so anyone can audit it.",
+      },
+      {
+        name: "Certificate",
+        title: "Certificate",
+        body: "The phone signs the photo with that certificate and a key that stays on the device, in the secure chip when there is one.",
       },
       {
         name: "You",
         title: "You",
-        short: "Checks the file",
-        body: "Anyone can check the file. If a single byte changes, it shows.",
+        body: "You check the file yourself. If a single byte changes, you see it.",
       },
     ],
     packagesTitle: "Packages",
     packages: [
       {
         title: "Rust server",
-        body: "Issues the certificate and checks the file.",
+        body: "Built on c2pa-rs. Issues the certificate and checks the file.",
         label: "c2pa-rs",
         href: links.c2paRs,
       },
       {
         title: "iOS SDK",
-        body: "Swift, Secure Enclave and App Attest.",
+        body: "Built on c2pa-swift. Swift, Secure Enclave and App Attest.",
         label: "c2pa-swift",
         href: links.c2paSwift,
       },
       {
         title: "Android SDK",
-        body: "Kotlin, StrongBox and Play Integrity.",
+        body: "Built on c2pa-android. Kotlin, StrongBox and Play Integrity.",
         label: "c2pa-android",
         href: links.c2paAndroid,
       },
@@ -205,61 +201,58 @@ const es: Dictionary = {
       { href: "/#limits", label: "Límites" },
       { href: "/about", label: "Sobre nosotros" },
     ],
-    tagline: "Procedencia de medios en código abierto.",
-    credit: "by Simply Software",
+    tagline: "Origen verificable de tus fotos en código abierto.",
+    credit: "por Simply Software",
     opensInNewTab: "se abre en una pestaña nueva",
   },
   home: {
-    metaTitle: "DeltaSync — Procedencia de medios en código abierto",
+    metaTitle: "DeltaSync — Origen verificable de tus fotos en código abierto",
     metaDescription:
       "SDKs de código abierto y un protocolo sobre C2PA. El teléfono firma una foto con una clave que se queda en el dispositivo, y cualquiera puede comprobar esa firma después.",
-    title: "Procedencia de medios, en código abierto.",
+    title: "Origen verificable de tus fotos, en código abierto.",
     leadBefore:
-      "Una foto firmada en el teléfono, que cualquiera puede comprobar después. Construido sobre ",
+      "Una foto firmada en el teléfono que tú puedes comprobar después. Construido sobre ",
     leadLink: "C2PA",
     leadAfter: ".",
     pillarsTitle: "Tres pilares",
     nameLine:
-      "«Delta» es cada cambio que sufre una foto desde que se toma. «Sync» es que la prueba viaja con ella.",
-    diagramLabel: "Certificado, nosotros, tú: cómo viaja la prueba",
-    edgeLabels: ["firma", "verifica"],
+      "«Delta» es cada cambio que sufre una foto desde que se toma. «Sync» es que la prueba viaja con ella: nosotros emitimos el certificado, él firma cada delta y tú sincronizas la prueba al comprobar el archivo.",
+    diagramLabel: "Nosotros, certificado, tú: cómo viaja la prueba",
+    edgeLabels: ["emite", "firma"],
     pillars: [
-      {
-        name: "Certificado",
-        title: "Certificado",
-        short: "Firma en el teléfono",
-        body: "El teléfono firma la foto con una clave que se queda en el dispositivo, en el chip seguro cuando lo hay, y un certificado de 15 minutos.",
-      },
       {
         name: "Nosotros",
         title: "Nosotros",
-        short: "Emitimos el certificado",
-        body: "DeltaSync emite ese certificado tras comprobar el dispositivo. El código es abierto: cualquiera puede auditarlo.",
+        body: "DeltaSync comprueba el dispositivo y emite un certificado de 15 minutos. El código es abierto: cualquiera puede auditarlo.",
+      },
+      {
+        name: "Certificado",
+        title: "Certificado",
+        body: "El teléfono firma la foto con ese certificado y una clave que se queda en el dispositivo, en el chip seguro cuando lo hay.",
       },
       {
         name: "Tú",
         title: "Tú",
-        short: "Compruebas el archivo",
-        body: "Cualquiera puede comprobar el archivo. Si cambia un byte, se nota.",
+        body: "Compruebas el archivo tú mismo. Si cambia un solo byte, lo ves.",
       },
     ],
     packagesTitle: "Paquetes",
     packages: [
       {
         title: "Servidor en Rust",
-        body: "Emite el certificado y comprueba el archivo.",
+        body: "Basado en c2pa-rs. Emite el certificado y comprueba el archivo.",
         label: "c2pa-rs",
         href: links.c2paRs,
       },
       {
         title: "SDK de iOS",
-        body: "Swift, Secure Enclave y App Attest.",
+        body: "Basado en c2pa-swift. Swift, Secure Enclave y App Attest.",
         label: "c2pa-swift",
         href: links.c2paSwift,
       },
       {
         title: "SDK de Android",
-        body: "Kotlin, StrongBox y Play Integrity.",
+        body: "Basado en c2pa-android. Kotlin, StrongBox y Play Integrity.",
         label: "c2pa-android",
         href: links.c2paAndroid,
       },
@@ -281,7 +274,7 @@ const es: Dictionary = {
       "Simply Software hace aplicaciones simples, baratas, seguras y fiables, sin anuncios, correos insistentes ni patrones adictivos.",
     title: "Sobre nosotros",
     lead: "Simply Software hace aplicaciones simples, baratas, seguras y fiables.",
-    body: "Las aplicaciones no tienen anuncios, ni correos insistentes, ni patrones adictivos. DeltaSync es una de ellas: procedencia de medios en código abierto, un conjunto de SDKs y un protocolo construido sobre C2PA.",
+    body: "Las aplicaciones no tienen anuncios, ni correos insistentes, ni patrones adictivos. DeltaSync es una de ellas: origen verificable de fotos en código abierto, un conjunto de SDKs y un protocolo construido sobre C2PA.",
     more: "Ver más de Simply Software",
   },
 }

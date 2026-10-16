@@ -1,9 +1,19 @@
-import { Server, Smartphone, TabletSmartphone } from "lucide-react"
+import { Fragment } from "react"
+import {
+  ArrowDown,
+  ArrowRight,
+  BadgeCheck,
+  ScanSearch,
+  Server,
+  ShieldCheck,
+  Smartphone,
+  TabletSmartphone,
+} from "lucide-react"
 
-import { PillarsDiagram } from "@/components/pillars-diagram"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { links, type ChromeCopy, type HomeCopy } from "@/lib/copy"
 
+const pillarIcons = [ShieldCheck, BadgeCheck, ScanSearch] as const
 const packageIcons = [Server, Smartphone, TabletSmartphone] as const
 
 const linkClass =
@@ -48,30 +58,49 @@ export function HomePage({
         <p className="max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground">
           {copy.nameLine}
         </p>
-        <PillarsDiagram
-          pillars={copy.pillars.map((p) => ({ title: p.title, short: p.short }))}
-          edgeLabels={copy.edgeLabels}
-        />
-        <ol className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {copy.pillars.map((pillar, index) => (
-            <li key={pillar.name} className="h-full">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">
-                    <h3>
-                      <span className="text-muted-foreground">
-                        {index + 1} ·{" "}
-                      </span>
-                      {pillar.title}
-                    </h3>
-                  </CardTitle>
-                  <CardDescription className="text-sm leading-relaxed text-pretty">
-                    {pillar.body}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </li>
-          ))}
+        <ol
+          aria-label={copy.diagramLabel}
+          className="flex flex-col items-stretch gap-2 md:flex-row md:items-stretch md:gap-3"
+        >
+          {copy.pillars.map((pillar, index) => {
+            const Icon = pillarIcons[index] ?? ShieldCheck
+            return (
+              <Fragment key={pillar.name}>
+                <li className="md:flex-1">
+                  <Card className="h-full">
+                    <CardHeader>
+                      <CardTitle className="text-base font-medium">
+                        <h3 className="flex items-center gap-3">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-border bg-muted text-foreground">
+                            <Icon className="size-5" aria-hidden="true" />
+                          </span>
+                          <span>
+                            <span className="text-muted-foreground">
+                              {index + 1} ·{" "}
+                            </span>
+                            {pillar.title}
+                          </span>
+                        </h3>
+                      </CardTitle>
+                      <CardDescription className="text-sm leading-relaxed text-pretty">
+                        {pillar.body}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </li>
+                {index < copy.pillars.length - 1 && (
+                  <li
+                    aria-hidden="true"
+                    className="flex flex-row items-center justify-center gap-2 py-1 text-sm font-medium text-muted-foreground md:flex-col md:py-0"
+                  >
+                    <span>{copy.edgeLabels[index]}</span>
+                    <ArrowDown className="size-4 md:hidden" />
+                    <ArrowRight className="hidden size-4 md:block" />
+                  </li>
+                )}
+              </Fragment>
+            )
+          })}
         </ol>
       </section>
 
@@ -121,7 +150,7 @@ export function HomePage({
         <p className="max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground">
           {copy.limitsIntro}
         </p>
-        <ul className="flex max-w-2xl list-disc flex-col gap-2 pl-5 text-sm leading-relaxed text-pretty text-muted-foreground marker:text-border">
+        <ul className="flex max-w-2xl list-disc flex-col gap-2 pl-5 text-base leading-relaxed text-pretty text-foreground/80 marker:text-muted-foreground">
           {copy.limits.map((limit) => (
             <li key={limit}>{limit}</li>
           ))}
