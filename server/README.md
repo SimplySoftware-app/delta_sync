@@ -22,6 +22,17 @@ The process listens on `0.0.0.0:8080`. A phone on the same network uses your mac
 
 The device certificate is chained to the CA created in `DATA_DIR` (`ca.crt.pem`, `ca.key.pem`). Those files are not in git.
 
+## Verify a photo
+
+`POST /verify` checks a photo's C2PA manifest and returns JSON with `manifest_found`, `validation_state`, the manifest and the validation results. If a single byte changed after signing, validation fails.
+
+```bash
+curl -F "file=@photo.jpg" https://<your-server>/verify
+# locally: curl -F "file=@photo.jpg" http://localhost:8080/verify
+```
+
+Use this endpoint rather than a generic Content Credentials viewer such as contentcredentials.org/verify: those viewers trust the public C2PA list, and DeltaSync signs with its own certificate authority (`ca.crt.pem`), so they will not show it as trusted.
+
 ## Hetzner and Caddy
 
 ```bash

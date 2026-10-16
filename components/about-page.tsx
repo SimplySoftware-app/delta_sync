@@ -1,7 +1,13 @@
 import { Button } from "@/components/ui/button"
-import { links, type AboutCopy } from "@/lib/copy"
+import { links, type AboutCopy, type ChromeCopy } from "@/lib/copy"
 
-export function AboutPage({ copy }: { copy: AboutCopy }) {
+export function AboutPage({
+  copy,
+  chrome,
+}: {
+  copy: AboutCopy
+  chrome: ChromeCopy
+}) {
   return (
     <main
       id="main"
@@ -16,9 +22,15 @@ export function AboutPage({ copy }: { copy: AboutCopy }) {
       <p className="max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground">
         {copy.body}
       </p>
-      <div>
+      <div className="flex flex-wrap gap-3">
         <Button asChild>
           <a href={links.simply}>{copy.more}</a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href={links.repo} target="_blank" rel="noopener noreferrer">
+            {copy.code}
+            <span className="sr-only"> ({chrome.opensInNewTab})</span>
+          </a>
         </Button>
       </div>
     </main>
