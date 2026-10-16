@@ -47,5 +47,5 @@ Compose joins the external network named `caddy` (override with `CADDY_DOCKER_NE
 ## Tests
 
 ```bash
-cargo test
+cargo test --workspace   # from the repo root; `cargo test` inside server/ also works
 ```

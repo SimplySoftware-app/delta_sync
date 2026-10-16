@@ -1,4 +1,10 @@
-use std::{io::Cursor, sync::Arc};
+use std::{
+    io::Cursor,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
+};
 
 use axum::{
     body::Body,
@@ -56,16 +62,47 @@ async fn test_app() -> axum::Router {
     app(Arc::new(state))
 }
 
+/// Unique per call: pid + process-wide counter, so parallel tests never share
+/// a data dir (a clock-based name can collide and fail with "File exists").
 fn tempfile_dir() -> std::path::PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
-        "delta-sync-test-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        "delta-sync-test-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::SeqCst)
     ));
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+/// Serializes tests that mutate process environment variables and restores
+/// them on drop, even if the test panics.
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvGuard {
+    _lock: MutexGuard<'static, ()>,
+    keys: Vec<&'static str>,
+}
+
+impl EnvGuard {
+    fn set(vars: &[(&'static str, String)]) -> Self {
+        let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for (key, value) in vars {
+            std::env::set_var(key, value);
+        }
+        Self {
+            _lock: lock,
+            keys: vars.iter().map(|(key, _)| *key).collect(),
+        }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for key in &self.keys {
+            std::env::remove_var(key);
+        }
+    }
 }
 
 async fn json_request(
@@ -242,21 +279,21 @@ async fn verify_accepts_a_manifest_signed_by_an_issued_device_cert() {
 #[tokio::test]
 async fn live_mode_rejects_a_fake_attestation() {
     let dir = tempfile_dir();
-    std::env::set_var("ATTESTATION_MODE", "live");
-    std::env::set_var("DATA_DIR", &dir);
-    std::env::set_var("LISTEN_ADDR", "0.0.0.0:8080");
-    std::env::set_var("ALLOWED_APP_IDS", "TESTTEAM.cloud.deltasync.capture");
-    std::env::set_var("ALLOWED_ANDROID_PACKAGES", "cloud.deltasync.capture");
-    std::env::set_var("GOOGLE_PLAY_CREDENTIALS_FILE", "");
-    let err = Config::from_env().unwrap_err();
+    let err = {
+        let _env = EnvGuard::set(&[
+            ("ATTESTATION_MODE", "live".to_string()),
+            ("DATA_DIR", dir.display().to_string()),
+            ("LISTEN_ADDR", "0.0.0.0:8080".to_string()),
+            ("ALLOWED_APP_IDS", "TESTTEAM.cloud.deltasync.capture".to_string()),
+            ("ALLOWED_ANDROID_PACKAGES", "cloud.deltasync.capture".to_string()),
+            ("GOOGLE_PLAY_CREDENTIALS_FILE", String::new()),
+        ]);
+        Config::from_env().unwrap_err()
+    };
     assert!(
         err.to_string().contains("GOOGLE_PLAY_CREDENTIALS_FILE"),
         "{err}"
     );
-    std::env::remove_var("ATTESTATION_MODE");
-    std::env::remove_var("ALLOWED_APP_IDS");
-    std::env::remove_var("ALLOWED_ANDROID_PACKAGES");
-    std::env::remove_var("GOOGLE_PLAY_CREDENTIALS_FILE");
 
     let mut config = Config::for_test(dir);
     config.attestation_mode = delta_sync_server::config::AttestationMode::Live;
