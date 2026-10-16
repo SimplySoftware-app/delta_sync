@@ -58,6 +58,17 @@ At most `SEAL_MAX_CONCURRENCY` (default 2) seals run at once. The 32 MiB cap sta
 
 `TSA_URL` is an RFC 3161 authority used for service seals. Unset it is `http://timestamp.digicert.com`. Set it empty or `off` to turn it off. It is on by default, so the service needs outbound HTTP; if the authority is down, sealing fails with 502 instead of producing a seal without a time-stamp. The authority is not on a trust list, so its response is informational (`timeStamp.untrusted`) and does not change a label. Tests never use the network. Time-stamps on device signatures, which keep a capture valid after its 24 h certificate expires, need the device-side signing work and are not in place yet.
 
+## Verify a photo
+
+`POST /verify` checks a photo's C2PA manifest and returns JSON with `manifest_found`, `validation_state`, the manifest and the validation results. If a single byte changed after signing, validation fails.
+
+```bash
+curl -F "file=@photo.jpg" https://<your-server>/verify
+# locally: curl -F "file=@photo.jpg" http://localhost:8080/verify
+```
+
+Use this endpoint rather than a generic Content Credentials viewer such as contentcredentials.org/verify: those viewers trust the public C2PA list, and DeltaSync signs with its own certificate authority (`ca.crt.pem`), so they will not show it as trusted.
+
 ## Hetzner and Caddy
 
 ```bash
