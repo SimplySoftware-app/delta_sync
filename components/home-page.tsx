@@ -49,10 +49,16 @@ export function HomePage({
           </a>
           {copy.leadAfter}
         </p>
-        <div className="pt-2">
+        <div className="flex flex-wrap gap-3 pt-2">
           <Button asChild>
             <a href={links.verify} target="_blank" rel="noopener noreferrer">
               {copy.cta}
+              {newTab}
+            </a>
+          </Button>
+          <Button asChild variant="outline">
+            <a href={links.repo} target="_blank" rel="noopener noreferrer">
+              {copy.secondaryCta}
               {newTab}
             </a>
           </Button>
@@ -142,15 +148,26 @@ export function HomePage({
                 <span className="flex-1 text-sm text-muted-foreground">
                   {pkg.body}
                 </span>
-                <a
-                  href={pkg.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`${linkClass} w-fit text-sm`}
-                >
-                  {pkg.label}
-                  {newTab}
-                </a>
+                <span className="flex flex-col gap-1 sm:items-end">
+                  <a
+                    href={pkg.repoHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${linkClass} w-fit text-sm`}
+                  >
+                    {pkg.repoLabel}
+                    {newTab}
+                  </a>
+                  <a
+                    href={pkg.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${linkClass} w-fit text-sm`}
+                  >
+                    {pkg.label}
+                    {newTab}
+                  </a>
+                </span>
               </li>
             )
           })}
