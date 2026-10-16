@@ -65,7 +65,9 @@ programa de conformidad, sus capturas son **Unknown**.
   imprime qué productos ganan o pierden elegibilidad. El mismo commit produce
   siempre los mismos bytes.
 - El workflow `c2pa-trust-update.yml` lo ejecuta cada lunes a las 06:00 UTC (y
-  a mano) y abre un PR con ese resumen. Nunca se fusiona solo.
+  a mano) y abre un PR con ese resumen. Nunca se fusiona solo. Como un PR
+  abierto con `GITHUB_TOKEN` no lanza CI, el workflow dispara `ci.yml` por
+  `workflow_dispatch` en su rama para que los checks requeridos de `main` corran.
 - Un test comprueba que los hashes coinciden con `SOURCE.lock`, y otro que el
   conjunto elegible es exactamente el de la tabla; un cambio de lista obliga a
   revisar ambos.

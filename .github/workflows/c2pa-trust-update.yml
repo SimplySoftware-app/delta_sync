@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   update:
@@ -59,3 +60,4 @@ jobs:
             --head "$branch" \
             --title "Actualizar listas oficiales C2PA ($SHORT)" \
             --body-file "$RUNNER_TEMP/body.md"
+          gh workflow run ci.yml --ref "$branch"

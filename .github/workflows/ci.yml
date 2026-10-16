@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lo dispara c2pa-trust-update.yml en su rama: los PR abiertos con
+  # GITHUB_TOKEN no lanzan pull_request y main exige estos checks.
+  workflow_dispatch:
 
 jobs:
   server:
