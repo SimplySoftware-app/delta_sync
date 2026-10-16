@@ -59,7 +59,7 @@ npm start
 
 ## Deployment
 
-Production is the Next.js landing on the Hetzner host, at [deltasync.simplysoftware.app](https://deltasync.simplysoftware.app). A push to `main` runs `.github/workflows/deploy.yml`: it syncs this repo to `/opt/apps/delta_sync`, builds the landing container on the external `edge_sites` network, installs `deploy/caddy/deltasync.simplysoftware.app.caddy` into `/opt/apps/edge/sites`, and reloads `edge-caddy`.
+Production is the Next.js landing on the Hetzner host, at [deltasync.simplysoftware.app](https://deltasync.simplysoftware.app). A push to `main` runs `.github/workflows/deploy.yml`: it syncs this repo to `/opt/apps/delta_sync`, builds the landing container on the host (it publishes `127.0.0.1:3600` only, which the host-networked `edge-caddy` proxies to), installs `deploy/caddy/deltasync.simplysoftware.app.caddy` into `/opt/apps/edge/sites`, reloads `edge-caddy`, and checks that the landing answers on `127.0.0.1:3600`.
 
 `vercel.json` and `.vercelignore` remain from the previous Vercel host. They are not how this landing is served. The old Vercel and GoDaddy notes are in `DEPLOYMENT.md` and `DOMAIN_SETUP.md`.
 

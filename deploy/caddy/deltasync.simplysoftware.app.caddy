@@ -1,6 +1,7 @@
 # Installed to /opt/apps/edge/sites and imported by edge-caddy.
-# Upstream is the landing container name on the external edge_sites network.
+# edge-caddy uses host networking, so the upstream is the landing's loopback
+# port published by docker-compose.yml (127.0.0.1:3600).
 
 deltasync.simplysoftware.app {
-	reverse_proxy delta-sync-landing:3000
+	reverse_proxy 127.0.0.1:3600
 }
