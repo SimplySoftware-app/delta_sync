@@ -1,7 +1,12 @@
 # Generado por scripts/update-c2pa-trust.py. No editar a mano.
 repo = "c2pa-org/conformance-public"
 commit = "b842170c710222e40c88e8ebfa55fa352aab8058"
-fetched_at = "2026-10-16T08:51:56Z"
+fetched_at = "2026-10-16T13:27:31Z"
+
+[[file]]
+name = "C2PA-TRUST-LIST.json"
+source = "trust-list/C2PA-TRUST-LIST.json"
+sha256 = "709555a038a78d4b001e96826313957a27771dc66ca881d408ec8cbf2e21627e"
 
 [[file]]
 name = "C2PA-TRUST-LIST.pem"

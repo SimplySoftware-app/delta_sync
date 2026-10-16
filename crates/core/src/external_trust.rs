@@ -8,6 +8,9 @@
 //!    The leaf is a non-CA certificate with `digitalSignature` key usage and
 //!    the `c2pa-kp-claimSigning` or `id-kp-documentSigning` EKU; every
 //!    intermediate is a CA and respects its `pathLen`.
+//!    The anchor the chain reaches must also be one the product is bound to
+//!    (see "Issuer binding" below): a Trust List member cannot vouch for
+//!    another vendor's product.
 //! 2. The signer certificate subject has exactly one `O` and one `CN`, and
 //!    `O`, `CN`, `C` (and `OU` when the record has one) match a conformance
 //!    record with `productType == generatorProduct` and
@@ -20,13 +23,27 @@
 //!    digitalCapture, no action carries any other `digitalSourceType`, and no
 //!    action, source type or assertion is named in `disallowedSignals`. A
 //!    signal name this code does not recognise fails closed.
-//! 6. (Label integration, later) Subsequent edits must be permitted actions
-//!    or our own service seal. Not decided here.
+//! 6. Subsequent edits must be permitted actions or our own service seal.
+//!    Not decided here: `label::assign_label` applies it to a manifest whose
+//!    role is `SignerRole::External`, which only [`external_manifest_record`]
+//!    hands out.
 //!
 //! The variant name [`ExternalVerdict::Hm`] is historical. This function only
 //! says that the *capture origin* is eligible to be called human-made. Edits
 //! after capture (rule 6) are judged by the label integration, which may still
 //! downgrade the final label.
+//!
+//! # Issuer binding
+//!
+//! Every anchor carries the `TEName` of its trusted entity in
+//! `C2PA-TRUST-LIST.json`. A product is bound to the entities whose
+//! normalised `TEName` equals its normalised DN `O` or `applicant` (see
+//! [`normalise_org`]), when that is exactly one entity. Otherwise the binding
+//! comes from the curated table `trust/external-issuer-bindings.json`, where
+//! every entry states its reason. A product with neither is never HM. A
+//! curated entry for a product whose binding can be derived is a conflict
+//! and also leaves it unbound, so the table cannot silently widen a derived
+//! binding.
 //!
 //! The lists are vendored under `trust/c2pa/` and embedded at compile time, so
 //! the verdict of a given binary is fixed by its build. `SOURCE.lock` pins the
@@ -63,7 +80,10 @@ use crate::DIGITAL_CAPTURE;
 pub const MIN_EXTERNAL_ASSURANCE: u8 = 2;
 
 static TRUST_LIST_PEM: &[u8] = include_bytes!("../../../trust/c2pa/C2PA-TRUST-LIST.pem");
+static TRUST_LIST_JSON: &[u8] = include_bytes!("../../../trust/c2pa/C2PA-TRUST-LIST.json");
 static PRODUCTS_JSON: &[u8] = include_bytes!("../../../trust/c2pa/conforming-products-list.json");
+static CURATED_BINDINGS_JSON: &[u8] =
+    include_bytes!("../../../trust/external-issuer-bindings.json");
 
 /// One action of the manifest, as the caller extracted it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -95,6 +115,8 @@ pub struct ExternalProduct {
     pub common_name: String,
     pub min_version: Option<String>,
     pub assurance_level: u8,
+    /// `TEName` of the Trust List entity whose anchor issued the signer.
+    pub issuer: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,6 +128,8 @@ pub enum ExternalVerdict {
 #[derive(Debug, Deserialize)]
 struct Record {
     status: String,
+    #[serde(default)]
+    applicant: String,
     product: Product,
     #[serde(default)]
     containers: Containers,
@@ -176,45 +200,336 @@ impl Record {
     }
 }
 
+/// A trust anchor and the `TEName` of the entity that operates it.
+struct Anchor {
+    der: Vec<u8>,
+    te_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CuratedBindings {
+    products: Vec<CuratedBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CuratedBinding {
+    #[serde(rename = "O")]
+    o: String,
+    #[serde(rename = "CN")]
+    cn: String,
+    issuers: Vec<String>,
+    /// Required so every entry documents why it exists; not used in code.
+    #[allow(dead_code)]
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteDoc {
+    #[serde(rename = "LoTE")]
+    lote: Lote,
+}
+
+#[derive(Debug, Deserialize)]
+struct Lote {
+    #[serde(rename = "TrustedEntitiesList", default)]
+    entities: Vec<LoteEntity>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteEntity {
+    #[serde(rename = "TrustedEntityInformation")]
+    info: LoteEntityInfo,
+    #[serde(rename = "TrustedEntityServices", default)]
+    services: Vec<LoteService>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteEntityInfo {
+    #[serde(rename = "TEName", default)]
+    name: Vec<LoteText>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteText {
+    #[serde(default)]
+    lang: String,
+    #[serde(default)]
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteService {
+    #[serde(rename = "ServiceInformation")]
+    info: LoteServiceInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteServiceInfo {
+    #[serde(rename = "ServiceDigitalIdentity")]
+    identity: LoteIdentity,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteIdentity {
+    #[serde(rename = "X509Certificates", default)]
+    certs: Vec<LoteCert>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoteCert {
+    val: String,
+}
+
+/// `TEName` in English, or the first one when there is no English entry.
+fn localized(values: &[LoteText]) -> String {
+    values
+        .iter()
+        .find(|v| v.lang == "en")
+        .or(values.first())
+        .map(|v| v.value.clone())
+        .unwrap_or_default()
+}
+
+/// `(TEName, certificate DER)` for every certificate of the trust list JSON.
+fn trust_entities(trust_json: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
+    use base64::Engine;
+    let doc: LoteDoc =
+        serde_json::from_slice(trust_json).map_err(|e| format!("trust list JSON: {e}"))?;
+    let mut out = Vec::new();
+    for entity in doc.lote.entities {
+        let name = localized(&entity.info.name);
+        for service in entity.services {
+            for cert in service.info.identity.certs {
+                let der = base64::engine::general_purpose::STANDARD
+                    .decode(cert.val.split_whitespace().collect::<String>())
+                    .map_err(|e| format!("trust list JSON certificate of {name}: {e}"))?;
+                out.push((name.clone(), der));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Legal-form words dropped from the end of an organisation name. Must match
+/// `LEGAL_SUFFIXES` in scripts/update-c2pa-trust.py.
+const LEGAL_SUFFIXES: &[&str] = &[
+    "inc",
+    "incorporated",
+    "llc",
+    "ltd",
+    "limited",
+    "co",
+    "corp",
+    "corporation",
+    "company",
+    "gmbh",
+    "bv",
+    "nv",
+    "plc",
+    "sa",
+    "ag",
+    "sl",
+    "srl",
+    "pte",
+    "pty",
+    "kk",
+];
+
+/// Comparable organisation name: ASCII letters lowercased, every other ASCII
+/// character (punctuation, spaces) separates words, non-ASCII characters are
+/// kept as they are, and trailing legal suffixes (`Co., Ltd.`, `LLC`,
+/// `Inc.`...) are dropped while at least one word remains. So
+/// `Qualcomm Technologies, Inc.` and `Qualcomm Technologies Inc.` are equal,
+/// and so are `EZDRM, INC` and `EZDRM, Inc`.
+pub fn normalise_org(name: &str) -> String {
+    let mapped: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else if c.is_ascii() {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    let mut words: Vec<&str> = mapped.split(' ').filter(|w| !w.is_empty()).collect();
+    while words.len() > 1 && words.last().is_some_and(|w| LEGAL_SUFFIXES.contains(w)) {
+        words.pop();
+    }
+    words.join(" ")
+}
+
+/// Where a product's issuer binding comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BindingSource {
+    /// From the `TEName` of the Trust List.
+    Derived,
+    /// From `trust/external-issuer-bindings.json`.
+    Curated,
+}
+
 /// Anchors plus conformance records. Production code only uses
 /// [`TrustStore::vendored`]; tests inject their own through `new`.
 pub struct TrustStore {
-    anchors: Vec<Vec<u8>>,
+    anchors: Vec<Anchor>,
     records: Vec<Record>,
+    curated: std::collections::BTreeMap<(String, String), Vec<String>>,
 }
 
 impl TrustStore {
-    /// `anchors_der`: trust anchors in DER. `products_json`: conformance list.
-    pub(crate) fn new(anchors_der: Vec<Vec<u8>>, products_json: &[u8]) -> Result<Self, String> {
+    /// `anchors`: `(TEName, DER)` of each trust anchor. `products_json`:
+    /// conformance list. `curated_json`: curated issuer bindings.
+    pub(crate) fn new(
+        anchors: Vec<(String, Vec<u8>)>,
+        products_json: &[u8],
+        curated_json: &[u8],
+    ) -> Result<Self, String> {
         let records: Vec<Record> =
             serde_json::from_slice(products_json).map_err(|e| format!("conformance list: {e}"))?;
+        let curated: CuratedBindings = serde_json::from_slice(curated_json)
+            .map_err(|e| format!("curated issuer bindings: {e}"))?;
+        let mut table = std::collections::BTreeMap::new();
+        for entry in curated.products {
+            if table
+                .insert((entry.o.clone(), entry.cn.clone()), entry.issuers)
+                .is_some()
+            {
+                return Err(format!(
+                    "curated issuer bindings: {} / {} appears twice",
+                    entry.o, entry.cn
+                ));
+            }
+        }
         Ok(Self {
-            anchors: anchors_der,
+            anchors: anchors
+                .into_iter()
+                .map(|(te_name, der)| Anchor { der, te_name })
+                .collect(),
             records,
+            curated: table,
         })
     }
 
-    fn from_pem(trust_pem: &[u8], products_json: &[u8]) -> Result<Self, String> {
+    /// Anchors come from the PEM; each must appear, byte for byte, in the
+    /// JSON of the same list, which names its entity. An anchor without a
+    /// name could not be bound, so the whole store fails to load.
+    fn from_lists(
+        trust_pem: &[u8],
+        trust_json: &[u8],
+        products_json: &[u8],
+        curated_json: &[u8],
+    ) -> Result<Self, String> {
+        let named = trust_entities(trust_json)?;
         let mut anchors = Vec::new();
         for pem in Pem::iter_from_buffer(trust_pem) {
             let pem = pem.map_err(|e| format!("trust list PEM: {e}"))?;
             if pem.label == "CERTIFICATE" {
-                anchors.push(pem.contents);
+                let name = named
+                    .iter()
+                    .find(|(_, der)| *der == pem.contents)
+                    .map(|(n, _)| n.clone())
+                    .ok_or("a trust list PEM certificate is missing from the trust list JSON")?;
+                anchors.push((name, pem.contents));
             }
         }
         if anchors.is_empty() {
             return Err("trust list has no certificates".into());
         }
-        Self::new(anchors, products_json)
+        Self::new(anchors, products_json, curated_json)
     }
 
     /// The store built from the vendored official lists.
     pub fn vendored() -> Result<&'static TrustStore, String> {
         static STORE: OnceLock<Result<TrustStore, String>> = OnceLock::new();
         STORE
-            .get_or_init(|| TrustStore::from_pem(TRUST_LIST_PEM, PRODUCTS_JSON))
+            .get_or_init(|| {
+                TrustStore::from_lists(
+                    TRUST_LIST_PEM,
+                    TRUST_LIST_JSON,
+                    PRODUCTS_JSON,
+                    CURATED_BINDINGS_JSON,
+                )
+            })
             .as_ref()
             .map_err(Clone::clone)
+    }
+
+    /// The `TEName`s a record's product may be issued by, or why it has none.
+    /// Must match `issuer_binding` in scripts/update-c2pa-trust.py.
+    fn issuer_binding(&self, record: &Record) -> Result<(BindingSource, Vec<String>), String> {
+        let dn = &record.product.dn;
+        let keys = [normalise_org(&dn.o), normalise_org(&record.applicant)];
+        let mut derived: Vec<String> = self
+            .anchors
+            .iter()
+            .filter(|a| {
+                let n = normalise_org(&a.te_name);
+                keys.iter().any(|k| !k.is_empty() && *k == n)
+            })
+            .map(|a| a.te_name.clone())
+            .collect();
+        derived.sort();
+        derived.dedup();
+        let curated = self.curated.get(&(dn.o.clone(), dn.cn.clone()));
+        let name = format!("{} / {}", dn.o, dn.cn);
+        match (derived.len(), curated) {
+            (1, None) => Ok((BindingSource::Derived, derived)),
+            (1, Some(_)) => Err(format!(
+                "{name} has a curated issuer binding although one can be derived"
+            )),
+            (_, Some(issuers)) => {
+                let mut issuers = issuers.clone();
+                issuers.sort();
+                issuers.dedup();
+                if issuers.is_empty()
+                    || !issuers
+                        .iter()
+                        .all(|i| self.anchors.iter().any(|a| a.te_name == *i))
+                {
+                    return Err(format!(
+                        "{name}: curated issuers are not all on the C2PA Trust List"
+                    ));
+                }
+                Ok((BindingSource::Curated, issuers))
+            }
+            (0, None) => Err(format!("{name} has no issuer binding")),
+            (_, None) => Err(format!(
+                "{name} matches several Trust List entities ({}); needs a curated binding",
+                derived.join("; ")
+            )),
+        }
+    }
+
+    /// Issuer binding of every eligible product, as
+    /// `O / CN -> derived|curated: TEName; ...` or `O / CN -> unbound`.
+    /// Same output as `update-c2pa-trust.py --list-bindings`.
+    pub fn issuer_bindings(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .records
+            .iter()
+            .filter(|r| self.is_eligible(r))
+            .map(|r| {
+                let tail = match self.issuer_binding(r) {
+                    Ok((BindingSource::Derived, i)) => format!("derived: {}", i.join("; ")),
+                    Ok((BindingSource::Curated, i)) => format!("curated: {}", i.join("; ")),
+                    Err(_) => "unbound".to_string(),
+                };
+                format!("{} / {} -> {tail}", r.product.dn.o, r.product.dn.cn)
+            })
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    fn is_eligible(&self, r: &Record) -> bool {
+        r.status == "conformant"
+            && r.product.product_type == "generatorProduct"
+            && r.level() >= MIN_EXTERNAL_ASSURANCE
+            && r.disallowed().all(signal_recognised)
+            && !r.disallowed().any(signal_matches_capture)
     }
 
     /// Products (`O`, `CN`) that can produce an HM capture under rules 2, 3
@@ -224,13 +539,7 @@ impl TrustStore {
         let mut out: Vec<(String, String)> = self
             .records
             .iter()
-            .filter(|r| {
-                r.status == "conformant"
-                    && r.product.product_type == "generatorProduct"
-                    && r.level() >= MIN_EXTERNAL_ASSURANCE
-                    && r.disallowed().all(signal_recognised)
-                    && !r.disallowed().any(signal_matches_capture)
-            })
+            .filter(|r| self.is_eligible(r))
             .map(|r| (r.product.dn.o.clone(), r.product.dn.cn.clone()))
             .collect();
         out.sort();
@@ -251,7 +560,7 @@ impl TrustStore {
         at_unix: i64,
     ) -> Result<ExternalProduct, String> {
         // 1. Chain to the pinned anchors, evaluated at the current time.
-        let subject = self.validate_chain(&info.cert_chain_der, at_unix)?;
+        let (subject, issuer) = self.validate_chain(&info.cert_chain_der, at_unix)?;
         // 5 (record independent): capture origin.
         check_inception(&info.actions)?;
 
@@ -271,8 +580,22 @@ impl TrustStore {
         }
         let mut worst: Option<(u8, String)> = None;
         for record in candidates {
-            match check_record(record, info) {
-                Ok(product) => return Ok(product),
+            let checked = match self.issuer_binding(record) {
+                Ok((_, issuers)) if issuers.contains(&issuer) => check_record(record, info),
+                Ok(_) => Err((
+                    1,
+                    format!(
+                        "{} / {} is not bound to the Trust List entity {issuer} that issued the signer",
+                        record.product.dn.o, record.product.dn.cn
+                    ),
+                )),
+                Err(e) => Err((1, e)),
+            };
+            match checked {
+                Ok(mut product) => {
+                    product.issuer = issuer;
+                    return Ok(product);
+                }
                 Err((stage, msg)) => {
                     if worst.as_ref().is_none_or(|(s, _)| stage > *s) {
                         worst = Some((stage, msg));
@@ -283,8 +606,9 @@ impl TrustStore {
         Err(worst.map(|(_, m)| m).unwrap_or_default())
     }
 
-    /// Returns the leaf subject when the chain is trusted at `at`.
-    fn validate_chain(&self, chain: &[Vec<u8>], at: i64) -> Result<Subject, String> {
+    /// Returns the leaf subject and the `TEName` of the anchor the chain
+    /// reaches, when the chain is trusted at `at`.
+    fn validate_chain(&self, chain: &[Vec<u8>], at: i64) -> Result<(Subject, String), String> {
         if chain.is_empty() {
             return Err("manifest has no signer certificate".into());
         }
@@ -297,10 +621,14 @@ impl TrustStore {
                 _ => Err("signer certificate chain is not valid DER".to_string()),
             })
             .collect::<Result<_, _>>()?;
-        let anchors: Vec<X509Certificate> = self
+        let anchors: Vec<(&str, X509Certificate)> = self
             .anchors
             .iter()
-            .filter_map(|der| X509Certificate::from_der(der).ok().map(|(_, c)| c))
+            .filter_map(|a| {
+                X509Certificate::from_der(&a.der)
+                    .ok()
+                    .map(|(_, c)| (a.te_name.as_str(), c))
+            })
             .collect();
 
         let leaf = &certs[0];
@@ -329,21 +657,21 @@ impl TrustStore {
                     return Err(format!("certificate {i} of the chain is signed with SHA-1"));
                 }
                 // The chain itself reached a trust anchor.
-                if self
+                if let Some(a) = self
                     .anchors
                     .iter()
-                    .any(|a| a.as_slice() == chain[i].as_slice())
+                    .find(|a| a.der.as_slice() == chain[i].as_slice())
                 {
-                    return Ok(());
+                    return Ok(a.te_name.clone());
                 }
-                if anchors.iter().any(|a| {
+                if let Some((name, _)) = anchors.iter().find(|(_, a)| {
                     a.is_ca()
                         && check_ca(a, i).is_ok()
                         && a.validity().is_valid_at(at_time)
                         && a.subject().as_raw() == cert.issuer().as_raw()
                         && cert.verify_signature(Some(a.public_key())).is_ok()
                 }) {
-                    return Ok(());
+                    return Ok(name.to_string());
                 }
                 match certs.get(i + 1) {
                     Some(next)
@@ -358,9 +686,9 @@ impl TrustStore {
             }
             Err("signer certificate does not chain to the C2PA Trust List".into())
         })();
-        trusted?;
+        let issuer = trusted?;
 
-        parse_subject(leaf.subject())
+        Ok((parse_subject(leaf.subject())?, issuer))
     }
 }
 
@@ -648,6 +976,7 @@ fn check_record(
             .clone()
             .filter(|m| !m.trim().is_empty()),
         assurance_level: level,
+        issuer: String::new(),
     })
 }
 
@@ -784,10 +1113,20 @@ mod tests {
         })
     }
 
+    /// A store whose only anchor is `pki`'s root, operated by an entity
+    /// named like the test product's organisation (so the binding derives).
     fn store(pki: &Pki, records: Vec<Value>) -> TrustStore {
+        store_with(vec![(O, pki)], records, json!({"products": []}))
+    }
+
+    fn store_with(anchors: Vec<(&str, &Pki)>, records: Vec<Value>, curated: Value) -> TrustStore {
         TrustStore::new(
-            vec![pki.root.der().to_vec()],
+            anchors
+                .into_iter()
+                .map(|(name, pki)| (name.to_string(), pki.root.der().to_vec()))
+                .collect(),
             &serde_json::to_vec(&records).unwrap(),
+            &serde_json::to_vec(&curated).unwrap(),
         )
         .unwrap()
     }
@@ -830,6 +1169,7 @@ mod tests {
                 assert_eq!(product.organization, O);
                 assert_eq!(product.common_name, CN);
                 assert_eq!(product.assurance_level, 2);
+                assert_eq!(product.issuer, O);
             }
             other => panic!("{other:?}"),
         }
@@ -1484,6 +1824,280 @@ mod tests {
         assert!(s.eligible_products().is_empty());
     }
 
+    // Issuer binding.
+
+    #[test]
+    fn another_vendors_root_cannot_issue_for_a_bound_product() {
+        // The attack the binding closes: a single-vendor root on the Trust
+        // List issues `O=<another vendor>, CN=<its camera>`.
+        let acme = new_root("Acme Root");
+        let rogue = new_root("Rogue Root");
+        let s = store_with(
+            vec![(O, &acme), ("Rogue Phones Co., Ltd.", &rogue)],
+            vec![record(O, CN, 2)],
+            json!({"products": []}),
+        );
+        let r = reason(s.verdict_at(&info(vec![leaf(&rogue, O, CN)]), NOW));
+        assert!(r.contains("not bound"), "{r}");
+        assert!(r.contains("Rogue Phones"), "{r}");
+        match s.verdict_at(&info(vec![leaf(&acme, O, CN)]), NOW) {
+            ExternalVerdict::Hm { product } => assert_eq!(product.issuer, O),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn binding_is_derived_from_o_or_applicant_after_normalisation() {
+        let pki = new_root("Root");
+        // Case, punctuation and legal suffixes differ; still one entity.
+        let s = store_with(
+            vec![("ACME IMAGING, INC.", &pki)],
+            vec![record(O, CN, 2)],
+            json!({"products": []}),
+        );
+        assert!(is_hm(&s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW)));
+        // Through the applicant when the DN O differs from the TEName.
+        let mut r = record(O, CN, 2);
+        r["applicant"] = json!("Parent Holdings Ltd");
+        let s = store_with(
+            vec![("Parent Holdings Limited", &pki)],
+            vec![r],
+            json!({"products": []}),
+        );
+        assert!(is_hm(&s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW)));
+        assert_eq!(
+            s.issuer_bindings(),
+            vec![format!("{O} / {CN} -> derived: Parent Holdings Limited")]
+        );
+    }
+
+    #[test]
+    fn an_unbound_product_is_unknown() {
+        let pki = new_root("Root");
+        let s = store_with(
+            vec![("Public CA Corp", &pki)],
+            vec![record(O, CN, 2)],
+            json!({"products": []}),
+        );
+        let r = reason(s.verdict_at(&info(vec![leaf(&pki, O, CN)]), NOW));
+        assert!(r.contains("no issuer binding"), "{r}");
+        assert_eq!(s.issuer_bindings(), vec![format!("{O} / {CN} -> unbound")]);
+    }
+
+    #[test]
+    fn several_matching_entities_need_a_curated_binding() {
+        let a = new_root("A");
+        let b = new_root("B");
+        let anchors = || vec![("Acme Imaging LLC", &a), ("Acme Imaging GmbH", &b)];
+        let s = store_with(anchors(), vec![record(O, CN, 2)], json!({"products": []}));
+        let r = reason(s.verdict_at(&info(vec![leaf(&a, O, CN)]), NOW));
+        assert!(r.contains("several"), "{r}");
+        let curated = json!({"products": [
+            {"O": O, "CN": CN, "issuers": ["Acme Imaging LLC"], "reason": "test"}
+        ]});
+        let s = store_with(anchors(), vec![record(O, CN, 2)], curated);
+        assert!(is_hm(&s.verdict_at(&info(vec![leaf(&a, O, CN)]), NOW)));
+        assert!(!is_hm(&s.verdict_at(&info(vec![leaf(&b, O, CN)]), NOW)));
+    }
+
+    #[test]
+    fn curated_bindings_are_checked() {
+        let ca = new_root("CA");
+        let other = new_root("Other");
+        let anchors = || vec![("Public CA Corp", &ca), ("Other CA", &other)];
+        let entry = |issuers: Value| json!({"products": [{"O": O, "CN": CN, "issuers": issuers, "reason": "test"}]});
+        let s = store_with(
+            anchors(),
+            vec![record(O, CN, 2)],
+            entry(json!(["Public CA Corp"])),
+        );
+        match s.verdict_at(&info(vec![leaf(&ca, O, CN)]), NOW) {
+            ExternalVerdict::Hm { product } => assert_eq!(product.issuer, "Public CA Corp"),
+            other => panic!("{other:?}"),
+        }
+        assert!(!is_hm(&s.verdict_at(&info(vec![leaf(&other, O, CN)]), NOW)));
+        // An issuer that is not on the Trust List voids the entry.
+        let s = store_with(
+            anchors(),
+            vec![record(O, CN, 2)],
+            entry(json!(["Public CA Corp", "Gone CA"])),
+        );
+        assert!(reason(s.verdict_at(&info(vec![leaf(&ca, O, CN)]), NOW)).contains("curated"));
+        // So does an empty list.
+        let s = store_with(anchors(), vec![record(O, CN, 2)], entry(json!([])));
+        assert!(!is_hm(&s.verdict_at(&info(vec![leaf(&ca, O, CN)]), NOW)));
+        // A curated entry cannot override (widen) a derivable binding.
+        let s = store_with(
+            vec![(O, &ca), ("Other CA", &other)],
+            vec![record(O, CN, 2)],
+            entry(json!(["Other CA"])),
+        );
+        let r = reason(s.verdict_at(&info(vec![leaf(&ca, O, CN)]), NOW));
+        assert!(r.contains("can be derived"), "{r}");
+        assert!(!is_hm(&s.verdict_at(&info(vec![leaf(&other, O, CN)]), NOW)));
+    }
+
+    #[test]
+    fn duplicate_curated_entries_fail_to_load() {
+        let pki = new_root("Root");
+        let e = json!({"O": O, "CN": CN, "issuers": [O], "reason": "x"});
+        let r = TrustStore::new(
+            vec![(O.into(), pki.root.der().to_vec())],
+            b"[]",
+            &serde_json::to_vec(&json!({"products": [e.clone(), e]})).unwrap(),
+        );
+        assert!(r.is_err());
+    }
+
+    const NORMALISE_PROBES: &[&str] = &[
+        "Google LLC",
+        "Qualcomm Technologies, Inc.",
+        "Qualcomm Technologies Inc.",
+        "EZDRM, INC",
+        "Huawei Technologies Co., Ltd.",
+        "Nuevo.Studio LLC",
+        "vivo Mobile Communication Co., Ltd.",
+        "Irdeto BV",
+        "Castlabs GmbH",
+        "Inc.",
+        "  Acme -- Imaging   s.a. ",
+        "Ünïcode Ltd",
+        "",
+    ];
+
+    #[test]
+    fn normalisation_rules() {
+        assert_eq!(normalise_org("Google LLC"), "google");
+        assert_eq!(
+            normalise_org("Qualcomm Technologies, Inc."),
+            normalise_org("Qualcomm Technologies Inc.")
+        );
+        assert_eq!(normalise_org("EZDRM, INC"), normalise_org("EZDRM, Inc"));
+        assert_eq!(
+            normalise_org("Huawei Technologies Co., Ltd."),
+            "huawei technologies"
+        );
+        assert_eq!(normalise_org("Nuevo.Studio LLC"), "nuevo studio");
+        // A name that is only a suffix keeps it.
+        assert_eq!(normalise_org("Inc."), "inc");
+        assert_eq!(normalise_org("Ünïcode Ltd"), "Ünïcode");
+    }
+
+    #[test]
+    fn python_updater_agrees_on_normalisation() {
+        let script = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/update-c2pa-trust.py"
+        );
+        let out = std::process::Command::new("python3")
+            .args(["-I", script, "--normalise"])
+            .args(NORMALISE_PROBES)
+            .output()
+            .expect("python3 is required for the parity test");
+        assert!(out.status.success());
+        let py: Vec<String> = String::from_utf8(out.stdout)
+            .unwrap()
+            .split('\n')
+            .map(str::to_owned)
+            .collect();
+        let rust: Vec<String> = NORMALISE_PROBES.iter().map(|n| normalise_org(n)).collect();
+        assert_eq!(&py[..NORMALISE_PROBES.len()], rust.as_slice());
+    }
+
+    #[test]
+    fn python_updater_agrees_on_probe_bindings() {
+        // Derived, through the applicant, ambiguous, curated, conflicting,
+        // curated with an unknown issuer, and unbound.
+        let mut records = Vec::new();
+        for (n, (o, applicant)) in [
+            ("Acme Imaging", ""),
+            ("Sub Brand", "Parent Holdings, Ltd."),
+            ("Twin", ""),
+            ("Small Vendor", ""),
+            ("Acme Imaging", "x"),
+            ("Ghost Vendor", ""),
+            ("Lonely Vendor", ""),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut r = record(o, &format!("Cam {n}"), 2);
+            r["applicant"] = json!(applicant);
+            records.push(r);
+        }
+        let curated = json!({"products": [
+            {"O": "Small Vendor", "CN": "Cam 3", "issuers": ["Public CA Corp"], "reason": "t"},
+            {"O": "Acme Imaging", "CN": "Cam 4", "issuers": ["Public CA Corp"], "reason": "t"},
+            {"O": "Ghost Vendor", "CN": "Cam 5", "issuers": ["Gone CA"], "reason": "t"}
+        ]});
+        let names = [
+            "ACME IMAGING INC",
+            "Parent Holdings Limited",
+            "Twin LLC",
+            "Twin GmbH",
+            "Public CA Corp",
+        ];
+        let roots: Vec<Pki> = names.iter().map(|n| new_root(n)).collect();
+        let s = store_with(
+            names.iter().copied().zip(roots.iter()).collect(),
+            records.clone(),
+            curated.clone(),
+        );
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD;
+        let trust = json!({"LoTE": {"TrustedEntitiesList": names.iter().zip(roots.iter()).map(|(n, p)| json!({
+            "TrustedEntityInformation": {"TEName": [{"lang": "en", "value": n}]},
+            "TrustedEntityServices": [{"ServiceInformation": {"ServiceDigitalIdentity": {
+                "X509Certificates": [{"val": b64.encode(p.root.der())}]
+            }}}]
+        })).collect::<Vec<_>>()}});
+        let dir = std::env::temp_dir();
+        let id = std::process::id();
+        let paths: Vec<std::path::PathBuf> = ["products", "trust", "curated"]
+            .iter()
+            .map(|k| dir.join(format!("c2pa-binding-{k}-{id}.json")))
+            .collect();
+        for (path, body) in paths.iter().zip([json!(records), trust, curated]) {
+            std::fs::write(path, serde_json::to_vec(&body).unwrap()).unwrap();
+        }
+        let script = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/update-c2pa-trust.py"
+        );
+        let out = std::process::Command::new("python3")
+            .args(["-I", script, "--list-bindings"])
+            .args(&paths)
+            .output()
+            .expect("python3 is required for the parity test");
+        for p in &paths {
+            std::fs::remove_file(p).ok();
+        }
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let py: Vec<String> = String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let rust = s.issuer_bindings();
+        assert_eq!(py, rust);
+        assert_eq!(
+            rust,
+            vec![
+                "Acme Imaging / Cam 0 -> derived: ACME IMAGING INC",
+                "Acme Imaging / Cam 4 -> unbound",
+                "Ghost Vendor / Cam 5 -> unbound",
+                "Lonely Vendor / Cam 6 -> unbound",
+                "Small Vendor / Cam 3 -> curated: Public CA Corp",
+                "Sub Brand / Cam 1 -> derived: Parent Holdings Limited",
+                "Twin / Cam 2 -> unbound",
+            ]
+        );
+    }
+
     // Production data.
 
     /// Eligible `O / CN` lines from scripts/update-c2pa-trust.py, optionally
@@ -1527,7 +2141,8 @@ mod tests {
     #[test]
     fn vendored_lock_hashes_match() {
         let lock = include_str!("../../../trust/c2pa/SOURCE.lock");
-        let files: [(&str, &[u8]); 3] = [
+        let files: [(&str, &[u8]); 4] = [
+            ("C2PA-TRUST-LIST.json", TRUST_LIST_JSON),
             ("C2PA-TRUST-LIST.pem", TRUST_LIST_PEM),
             (
                 "C2PA-TSA-TRUST-LIST.pem",
@@ -1563,8 +2178,9 @@ mod tests {
     fn vendored_store_loads_every_anchor() {
         let store = TrustStore::vendored().expect("vendored store");
         assert_eq!(store.anchors.len(), 30);
-        for der in &store.anchors {
-            let (rest, cert) = X509Certificate::from_der(der).expect("anchor parses");
+        for anchor in &store.anchors {
+            assert!(!anchor.te_name.is_empty());
+            let (rest, cert) = X509Certificate::from_der(&anchor.der).expect("anchor parses");
             assert!(rest.is_empty());
             assert!(cert.is_ca());
         }
@@ -1600,6 +2216,80 @@ mod tests {
     }
 
     #[test]
+    fn issuer_bindings_at_pinned_commit() {
+        // Every eligible product is bound. Google and Whole Earth Labs run
+        // their own anchors; the other six have none, so the curated table
+        // limits them to the commercial CAs that issue to third parties.
+        let public = "DigiCert, Inc.; SSL Corporation; TrustAsia Technologies, Inc.";
+        let want: Vec<String> = [
+            ("EZDRM, INC / DynamicSigner", format!("curated: {public}")),
+            (
+                "Evergreen Labs / GreenCheckmark - Android",
+                format!("curated: {public}"),
+            ),
+            ("Google LLC / Pixel Camera", "derived: Google LLC".into()),
+            (
+                "Nuevo.Studio LLC / VWFNDR MBL Android",
+                format!("curated: {public}"),
+            ),
+            (
+                "Qualcomm Technologies, Inc. / Snapdragon 8 Elite Gen 5",
+                format!("curated: {public}"),
+            ),
+            (
+                "Rheely Inc. / Rheely for Android",
+                format!("curated: {public}"),
+            ),
+            ("UX Vision LLC / Stroma", format!("curated: {public}")),
+            (
+                "Whole Earth Labs LLC / RealReel Android",
+                "derived: Whole Earth Labs LLC".into(),
+            ),
+        ]
+        .into_iter()
+        .map(|(p, b)| format!("{p} -> {b}"))
+        .collect();
+        assert_eq!(TrustStore::vendored().unwrap().issuer_bindings(), want);
+    }
+
+    #[test]
+    fn curated_table_has_no_stale_entries() {
+        // Each curated entry is for an eligible product (one that dropped
+        // out of the list must be removed in the same PR).
+        let store = TrustStore::vendored().unwrap();
+        let eligible = store.eligible_products();
+        for (o, cn) in store.curated.keys() {
+            assert!(
+                eligible.contains(&(o.clone(), cn.clone())),
+                "{o} / {cn} is curated but not eligible"
+            );
+        }
+    }
+
+    #[test]
+    fn python_updater_agrees_on_the_vendored_bindings() {
+        let script = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/update-c2pa-trust.py"
+        );
+        let out = std::process::Command::new("python3")
+            .args(["-I", script, "--list-bindings"])
+            .output()
+            .expect("python3 is required for the parity test");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let py: Vec<String> = String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(py, TrustStore::vendored().unwrap().issuer_bindings());
+    }
+
+    #[test]
     fn production_path_rejects_an_untrusted_signer() {
         let pki = new_root("Rogue Root");
         let v = external_capture_verdict(&info(vec![leaf(&pki, "Google LLC", "Pixel Camera")]));
@@ -1615,8 +2305,8 @@ mod tests {
         let store = TrustStore::vendored().unwrap();
         let mut roots = 0;
         let mut unverifiable = Vec::new();
-        for der in &store.anchors {
-            let (_, cert) = X509Certificate::from_der(der).unwrap();
+        for anchor in &store.anchors {
+            let (_, cert) = X509Certificate::from_der(&anchor.der).unwrap();
             if cert.subject().as_raw() == cert.issuer().as_raw() {
                 roots += 1;
                 if cert.verify_signature(None).is_err() {
