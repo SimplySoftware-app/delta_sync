@@ -9,6 +9,7 @@ COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
 COPY server/certs ./server/certs
 COPY crates ./crates
+COPY trust ./trust
 RUN cargo build --release --locked -p delta-sync-server
 
 FROM debian:bookworm-slim

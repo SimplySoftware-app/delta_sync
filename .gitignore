@@ -56,3 +56,6 @@ next-env.d.ts
 
 # Cargo workspace
 /target/
+
+# Public C2PA trust lists are vendored on purpose (trust/c2pa).
+!trust/c2pa/*.pem
