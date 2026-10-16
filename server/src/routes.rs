@@ -262,8 +262,13 @@ async fn verify(
     let format = sniff_format(&bytes, &filename).ok_or_else(|| {
         ApiError::bad_request("unsupported file type. Send a JPEG, PNG, WebP, or MP4.")
     })?;
-    let result = verify_asset::verify_bytes(&bytes, format, state.ca.root_pem())
-        .map_err(ApiError::bad_request)?;
+    let result = verify_asset::verify_bytes_with(
+        &bytes,
+        format,
+        state.ca.root_pem(),
+        state.config.tsa_trust_anchors.as_deref(),
+    )
+    .map_err(ApiError::bad_request)?;
     Ok(Json(json!({
         "manifest_found": result.manifest_found,
         "format": result.format,
@@ -299,7 +304,7 @@ async fn verify_label(
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v == "true" || v == "1");
     let verdict = tokio::task::spawn_blocking(move || {
-        delta_sync_core::verify_bytes(&body, &mime, state.ca.root_pem(), declared_ai)
+        delta_sync_core::verify_bytes_with(&body, &mime, &state.verify_options(), declared_ai)
     })
     .await
     .map_err(ApiError::internal)?;

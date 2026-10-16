@@ -30,13 +30,18 @@ mod wasm_api;
 pub use device_signer::{DeviceSigner, SignerAlg};
 pub use edit::Edit;
 pub use error::CoreError;
-pub use keys::{generate_device_key, DevAuthority, DeviceKey, IssuedCert};
-pub use label::{assign_label, CredentialReport, Label, LabelVerdict};
+pub use keys::{
+    generate_device_key, DevAuthority, DeviceKey, IssuedCert, DEVICE_ICA_CN, SERVICE_ICA_CN,
+};
+pub use label::{
+    assign_label, ActionRecord, CredentialReport, Label, LabelVerdict, ManifestRecord, SignerRole,
+};
 
 #[cfg(feature = "c2pa")]
 pub use sign::{
-    sign_capture, sign_capture_file, sign_derivative, sign_derivative_with_edits, sign_edit,
-    verify_bytes, verify_file,
+    seal_derivative, sign_capture, sign_capture_file, sign_capture_file_with, sign_derivative,
+    sign_derivative_with_edits, sign_edit, verify_bytes, verify_bytes_with, verify_file,
+    verify_file_with, SealRequest, TimestampProvider, Timestamping, VerifyOptions,
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -49,3 +54,6 @@ pub const COMPOSITE_TRAINED: &str =
 
 /// Claim-generator name written into manifests. HM requires this name.
 pub const GENERATOR_NAME: &str = "Delta Sync";
+
+/// Claim generator written into the manifests the service seals.
+pub const SEAL_GENERATOR: &str = "Delta Sync Authority";

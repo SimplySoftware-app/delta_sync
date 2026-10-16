@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::edit::{AUDIO_REMOVED, COVER_SELECTED};
 use crate::{COMPOSITE_TRAINED, GENERATOR_NAME, TRAINED_ALGORITHMIC};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +25,48 @@ impl Label {
     }
 }
 
+/// Which of our authorities signed a manifest, read from its certificate chain.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SignerRole {
+    /// The chain goes through the Device ICA: a capture.
+    Device,
+    /// The chain goes through the Service ICA: a seal of processing.
+    Service,
+    /// Anything else. Never part of an HM.
+    #[default]
+    Unknown,
+}
+
+impl SignerRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SignerRole::Device => "device",
+            SignerRole::Service => "service",
+            SignerRole::Unknown => "unknown",
+        }
+    }
+}
+
+/// One action of a manifest.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionRecord {
+    pub action: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub source: String,
+}
+
+/// One manifest of the chain (the active one and every ingredient's), with the
+/// authority that signed it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManifestRecord {
+    pub id: String,
+    pub role: SignerRole,
+    pub actions: Vec<ActionRecord>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CredentialReport {
     pub embedded: bool,
@@ -32,6 +77,10 @@ pub struct CredentialReport {
     pub sources: Vec<String>,
     pub validation_codes: Vec<String>,
     pub self_declared_ai: bool,
+    /// Every manifest in the chain, each with the role that signed it. Without
+    /// them the signer cannot be identified and the label is never HM.
+    #[serde(default)]
+    pub manifests: Vec<ManifestRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,10 +91,15 @@ pub struct LabelVerdict {
     pub summary: String,
     pub reasons: Vec<String>,
     pub actions: Vec<String>,
+    /// Role of the signer of each manifest in the chain, newest first
+    /// ("device", "service" or "unknown").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signers: Vec<String>,
 }
 
-const PERMITTED: &[&str] = &[
-    "c2pa.created",
+/// What the Service ICA may sign. `c2pa.edited` is too generic to allow on its
+/// own: it counts only with one of the descriptions in [`PERMITTED_EDITED`].
+const PERMITTED_SERVICE: &[&str] = &[
     "c2pa.opened",
     "c2pa.cropped",
     "c2pa.orientation",
@@ -58,25 +112,29 @@ const PERMITTED: &[&str] = &[
     "c2pa.published",
 ];
 
+/// `c2pa.edited` descriptions the label rules accept.
+const PERMITTED_EDITED: &[&str] = &[AUDIO_REMOVED, COVER_SELECTED];
+
+fn service_may_sign(action: &ActionRecord) -> bool {
+    if action.action == "c2pa.edited" {
+        return PERMITTED_EDITED.contains(&action.description.as_str());
+    }
+    PERMITTED_SERVICE.contains(&action.action.as_str())
+}
+
+fn is_capture(action: &ActionRecord) -> bool {
+    action.action == "c2pa.created" && action.source.contains("digitalCapture")
+}
+
 pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
     let mut reasons = Vec::new();
     if report.self_declared_ai {
         reasons.push("self_declared_ai".into());
-        return verdict(
-            Label::Ai,
-            "AI · declared by the author",
-            reasons,
-            &report.actions,
-        );
+        return verdict(Label::Ai, "AI · declared by the author", reasons, report);
     }
     if report.sources.iter().any(|s| is_ai_source(s)) {
         reasons.push("trained_algorithmic_media".into());
-        return verdict(
-            Label::Ai,
-            "AI · trained algorithmic media",
-            reasons,
-            &report.actions,
-        );
+        return verdict(Label::Ai, "AI · trained algorithmic media", reasons, report);
     }
     if !report.embedded {
         reasons.push("no_manifest".into());
@@ -84,11 +142,10 @@ pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
             Label::Unknown,
             "Unknown · no Content Credentials",
             reasons,
-            &report.actions,
+            report,
         );
     }
 
-    let ours = report.generator.contains(GENERATOR_NAME) || report.issuer.contains("Delta Sync");
     let hard_fail = report.validation_codes.iter().any(|c| {
         let c = c.to_ascii_lowercase();
         c.contains("mismatch")
@@ -97,25 +154,52 @@ pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
             || c.contains("untrusted")
             || c.contains("nottrusted")
     });
-    let actions_ok = report
-        .actions
-        .iter()
-        .all(|a| PERMITTED.contains(&a.as_str()));
-    let capture = report.sources.iter().any(|s| s.contains("digitalCapture"));
-
-    if !ours {
-        reasons.push("generator_not_allowlisted".into());
-    }
-    if !capture {
-        reasons.push("not_digital_capture".into());
-    }
-    if !actions_ok {
-        reasons.push("disallowed_action".into());
-    }
     if hard_fail {
         reasons.push("validation_failed".into());
     }
-    if ours && capture && actions_ok && !hard_fail {
+
+    // Who may sign what. A capture is signed under the Device ICA and nothing
+    // else is. Processing (edits, transcoding, sealing) is signed under the
+    // Service ICA and it never claims a capture. A manifest signed by anyone
+    // else, ingredients included, keeps the whole chain out of HM.
+    if report.manifests.is_empty() {
+        reasons.push("signer_not_identified".into());
+    }
+    for manifest in &report.manifests {
+        match manifest.role {
+            SignerRole::Unknown => push_once(&mut reasons, "signer_not_ours"),
+            SignerRole::Device => {
+                for action in &manifest.actions {
+                    if action.action == "c2pa.created" {
+                        if !is_capture(action) {
+                            push_once(&mut reasons, "not_digital_capture");
+                        }
+                    } else if action.action != "c2pa.opened" {
+                        push_once(&mut reasons, "device_cannot_edit");
+                    }
+                }
+            }
+            SignerRole::Service => {
+                for action in &manifest.actions {
+                    if action.action == "c2pa.created" || action.source.contains("digitalCapture") {
+                        push_once(&mut reasons, "service_cannot_capture");
+                    } else if !service_may_sign(action) {
+                        push_once(&mut reasons, "disallowed_action");
+                    }
+                }
+            }
+        }
+    }
+    let device_capture = report
+        .manifests
+        .iter()
+        .any(|m| m.role == SignerRole::Device && m.actions.iter().any(is_capture));
+    if !device_capture {
+        push_once(&mut reasons, "no_device_capture");
+    }
+
+    let rules_ok = !hard_fail && reasons.is_empty();
+    if rules_ok {
         let edits: Vec<&str> = report
             .operations
             .iter()
@@ -128,29 +212,40 @@ pub fn assign_label(report: &CredentialReport) -> LabelVerdict {
             format!("HM · captured, then edited: {}", edits.join(", "))
         };
         reasons.push("delta_sync_capture".into());
-        return verdict(Label::Hm, summary, reasons, &report.actions);
+        return verdict(Label::Hm, summary, reasons, report);
     }
 
     verdict(
         Label::Unknown,
         "Unknown · credentials were not accepted as HM",
         reasons,
-        &report.actions,
+        report,
     )
+}
+
+fn push_once(reasons: &mut Vec<String>, reason: &str) {
+    if !reasons.iter().any(|r| r == reason) {
+        reasons.push(reason.to_string());
+    }
 }
 
 fn verdict(
     label: Label,
     summary: impl Into<String>,
     reasons: Vec<String>,
-    actions: &[String],
+    report: &CredentialReport,
 ) -> LabelVerdict {
     LabelVerdict {
         trusted: false,
         label: label.as_str().into(),
         summary: summary.into(),
         reasons,
-        actions: actions.to_vec(),
+        actions: report.actions.clone(),
+        signers: report
+            .manifests
+            .iter()
+            .map(|m| m.role.as_str().to_string())
+            .collect(),
     }
 }
 
@@ -162,7 +257,12 @@ fn is_ai_source(value: &str) -> bool {
 }
 
 /// Walk a C2PA manifest-store JSON document into a [`CredentialReport`].
-pub fn report_from_store(store: &Value, self_declared_ai: bool) -> CredentialReport {
+/// `roles` maps a manifest label to the authority that signed it.
+pub fn report_from_store_with_roles(
+    store: &Value,
+    self_declared_ai: bool,
+    roles: &HashMap<String, SignerRole>,
+) -> CredentialReport {
     let mut report = CredentialReport {
         embedded: true,
         self_declared_ai,
@@ -178,6 +278,19 @@ pub fn report_from_store(store: &Value, self_declared_ai: bool) -> CredentialRep
         }
     }
     walk(store, &mut report);
+    if let Some(manifests) = store.get("manifests").and_then(Value::as_object) {
+        let active = store.get("active_manifest").and_then(Value::as_str);
+        // Newest first: the active manifest, then the rest in a stable order.
+        let mut ids: Vec<&String> = manifests.keys().collect();
+        ids.sort_by_key(|id| (Some(id.as_str()) != active, id.to_string()));
+        for id in ids {
+            report.manifests.push(ManifestRecord {
+                id: id.clone(),
+                role: roles.get(id).copied().unwrap_or_default(),
+                actions: actions_of(&manifests[id]),
+            });
+        }
+    }
     if report.generator.is_empty() {
         if let Some(active) = store.get("active_manifest").and_then(Value::as_str) {
             if let Some(gen) = store
@@ -210,7 +323,7 @@ fn walk(value: &Value, report: &mut CredentialReport) {
             }
             if let Some(Value::String(action)) = map.get("action") {
                 report.actions.push(action.clone());
-                if let Some(op) = operation_for(action) {
+                if let Some(op) = operation_for(action, &description_of(map)) {
                     if !report.operations.contains(&op.to_string()) {
                         report.operations.push(op.to_string());
                     }
@@ -263,8 +376,55 @@ fn is_ignorable_code(code: &str) -> bool {
     code == "timeStamp.untrusted"
 }
 
-fn operation_for(action: &str) -> Option<&'static str> {
+/// The actions of one manifest, from its `c2pa.actions` assertions.
+fn actions_of(manifest: &Value) -> Vec<ActionRecord> {
+    let mut records = Vec::new();
+    let Some(assertions) = manifest.get("assertions").and_then(Value::as_array) else {
+        return records;
+    };
+    for assertion in assertions {
+        let is_actions = assertion
+            .get("label")
+            .and_then(Value::as_str)
+            .is_some_and(|l| l.starts_with("c2pa.actions"));
+        if !is_actions {
+            continue;
+        }
+        let Some(actions) = assertion.pointer("/data/actions").and_then(Value::as_array) else {
+            continue;
+        };
+        for action in actions {
+            let Some(name) = action.get("action").and_then(Value::as_str) else {
+                continue;
+            };
+            records.push(ActionRecord {
+                action: name.to_string(),
+                description: description_of(action.as_object().unwrap_or(&Default::default())),
+                source: action
+                    .get("digitalSourceType")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            });
+        }
+    }
+    records
+}
+
+/// The `description` of an action: its own field, or the one in `parameters`.
+fn description_of(action: &serde_json::Map<String, Value>) -> String {
+    action
+        .get("description")
+        .or_else(|| action.get("parameters").and_then(|p| p.get("description")))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn operation_for(action: &str, description: &str) -> Option<&'static str> {
     match action {
+        "c2pa.edited" if description == AUDIO_REMOVED => Some("mute"),
+        "c2pa.edited" if description == COVER_SELECTED => Some("cover"),
         "c2pa.cropped" => Some("crop"),
         "c2pa.trimmed" => Some("trim"),
         "c2pa.orientation" => Some("rotate"),
@@ -286,34 +446,235 @@ mod tests {
     use crate::DIGITAL_CAPTURE;
     use serde_json::json;
 
-    fn capture() -> CredentialReport {
-        CredentialReport {
-            embedded: true,
-            generator: "Delta Sync/0.1.0".into(),
-            issuer: "CN=Delta Sync Dev CA".into(),
-            actions: vec!["c2pa.created".into()],
-            operations: vec![],
-            sources: vec![DIGITAL_CAPTURE.into()],
-            validation_codes: vec![],
-            self_declared_ai: false,
+    fn action(name: &str) -> ActionRecord {
+        ActionRecord {
+            action: name.into(),
+            ..ActionRecord::default()
         }
     }
 
-    #[test]
-    fn capture_from_our_authority_is_hm() {
-        let verdict = assign_label(&capture());
-        assert_eq!(verdict.label, "HM");
-        assert_eq!(verdict.summary, "HM · captured");
+    fn described(name: &str, description: &str) -> ActionRecord {
+        ActionRecord {
+            description: description.into(),
+            ..action(name)
+        }
+    }
+
+    fn created() -> ActionRecord {
+        ActionRecord {
+            source: DIGITAL_CAPTURE.into(),
+            ..action("c2pa.created")
+        }
+    }
+
+    fn manifest(role: SignerRole, actions: Vec<ActionRecord>) -> ManifestRecord {
+        ManifestRecord {
+            id: format!("urn:{}", role.as_str()),
+            role,
+            actions,
+        }
+    }
+
+    /// A report built the way the verifier builds it from a chain.
+    fn report(manifests: Vec<ManifestRecord>) -> CredentialReport {
+        let mut report = CredentialReport {
+            embedded: true,
+            generator: "Delta Sync/0.1.0".into(),
+            issuer: "Delta Sync Device".into(),
+            ..CredentialReport::default()
+        };
+        for manifest in &manifests {
+            for action in &manifest.actions {
+                report.actions.push(action.action.clone());
+                if !action.source.is_empty() {
+                    report.sources.push(action.source.clone());
+                }
+                if let Some(op) = operation_for(&action.action, &action.description) {
+                    if !report.operations.contains(&op.to_string()) {
+                        report.operations.push(op.to_string());
+                    }
+                }
+            }
+        }
+        report.manifests = manifests;
+        report
+    }
+
+    fn capture() -> CredentialReport {
+        report(vec![manifest(SignerRole::Device, vec![created()])])
+    }
+
+    /// A capture under the Device ICA sealed under the Service ICA.
+    fn sealed(seal: Vec<ActionRecord>) -> CredentialReport {
+        report(vec![
+            manifest(SignerRole::Service, seal),
+            manifest(SignerRole::Device, vec![created()]),
+        ])
+    }
+
+    fn reasons(report: &CredentialReport) -> Vec<String> {
+        assign_label(report).reasons
     }
 
     #[test]
-    fn crop_keeps_hm() {
-        let mut report = capture();
-        report.actions.push("c2pa.cropped".into());
-        report.operations.push("crop".into());
-        let verdict = assign_label(&report);
+    fn capture_under_the_device_ica_is_hm() {
+        let verdict = assign_label(&capture());
         assert_eq!(verdict.label, "HM");
-        assert_eq!(verdict.summary, "HM · captured, then edited: crop");
+        assert_eq!(verdict.summary, "HM · captured");
+        assert_eq!(verdict.signers, vec!["device"]);
+    }
+
+    #[test]
+    fn a_service_seal_over_a_device_capture_is_hm() {
+        let report = sealed(vec![
+            action("c2pa.opened"),
+            action("c2pa.cropped"),
+            action("c2pa.transcoded"),
+            action("c2pa.resized"),
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "HM", "{verdict:?}");
+        assert_eq!(
+            verdict.summary,
+            "HM · captured, then edited: crop, compression"
+        );
+        assert_eq!(verdict.signers, vec!["service", "device"]);
+    }
+
+    #[test]
+    fn a_device_cannot_produce_a_seal() {
+        // The device certificate signs a transcode: a compromised device
+        // must not be able to issue what only the service may.
+        let report = report(vec![
+            manifest(
+                SignerRole::Device,
+                vec![action("c2pa.opened"), action("c2pa.transcoded")],
+            ),
+            manifest(SignerRole::Device, vec![created()]),
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown", "{verdict:?}");
+        assert!(verdict.reasons.contains(&"device_cannot_edit".to_string()));
+    }
+
+    #[test]
+    fn a_device_cannot_sign_an_edit_either() {
+        let report = report(vec![
+            manifest(
+                SignerRole::Device,
+                vec![action("c2pa.opened"), action("c2pa.cropped")],
+            ),
+            manifest(SignerRole::Device, vec![created()]),
+        ]);
+        assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    #[test]
+    fn the_service_cannot_produce_a_capture() {
+        let report = report(vec![manifest(SignerRole::Service, vec![created()])]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown", "{verdict:?}");
+        assert!(verdict
+            .reasons
+            .contains(&"service_cannot_capture".to_string()));
+        assert!(verdict.reasons.contains(&"no_device_capture".to_string()));
+    }
+
+    #[test]
+    fn a_service_seal_cannot_smuggle_a_capture_claim_over_a_foreign_origin() {
+        // A seal whose only capture claim is its own, over an unsigned origin.
+        let report = report(vec![manifest(
+            SignerRole::Service,
+            vec![action("c2pa.opened"), created(), action("c2pa.transcoded")],
+        )]);
+        assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    #[test]
+    fn any_untrusted_ingredient_makes_the_chain_unknown() {
+        let report = report(vec![
+            manifest(SignerRole::Service, vec![action("c2pa.transcoded")]),
+            manifest(SignerRole::Unknown, vec![created()]),
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown", "{verdict:?}");
+        assert!(verdict.reasons.contains(&"signer_not_ours".to_string()));
+
+        // Even with a good capture underneath, a stray manifest signed by
+        // someone else poisons the chain.
+        let report = report_with(vec![
+            manifest(SignerRole::Service, vec![action("c2pa.transcoded")]),
+            manifest(SignerRole::Unknown, vec![action("c2pa.opened")]),
+            manifest(SignerRole::Device, vec![created()]),
+        ]);
+        assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    fn report_with(manifests: Vec<ManifestRecord>) -> CredentialReport {
+        report(manifests)
+    }
+
+    #[test]
+    fn a_report_that_names_no_signer_is_never_hm() {
+        // The generator string alone proves nothing.
+        let mut report = capture();
+        report.manifests.clear();
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "Unknown");
+        assert!(verdict
+            .reasons
+            .contains(&"signer_not_identified".to_string()));
+    }
+
+    #[test]
+    fn a_report_with_the_name_delta_sync_but_an_unknown_signer_is_unknown() {
+        let report = report(vec![manifest(SignerRole::Unknown, vec![created()])]);
+        assert_eq!(report.generator, "Delta Sync/0.1.0");
+        assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    #[test]
+    fn mute_is_a_permitted_edit_only_with_its_description() {
+        let muted = sealed(vec![
+            action("c2pa.opened"),
+            described("c2pa.edited", AUDIO_REMOVED),
+            action("c2pa.transcoded"),
+        ]);
+        let verdict = assign_label(&muted);
+        assert_eq!(verdict.label, "HM", "{verdict:?}");
+        assert_eq!(
+            verdict.summary,
+            "HM · captured, then edited: mute, compression"
+        );
+
+        let anything = sealed(vec![
+            action("c2pa.opened"),
+            described("c2pa.edited", "replaced the sky"),
+            action("c2pa.transcoded"),
+        ]);
+        assert_eq!(assign_label(&anything).label, "Unknown");
+        assert!(reasons(&anything).contains(&"disallowed_action".to_string()));
+
+        let bare = sealed(vec![action("c2pa.opened"), action("c2pa.edited")]);
+        assert_eq!(assign_label(&bare).label, "Unknown");
+    }
+
+    #[test]
+    fn cover_is_a_permitted_edit() {
+        let report = sealed(vec![
+            action("c2pa.opened"),
+            described("c2pa.edited", COVER_SELECTED),
+            action("c2pa.transcoded"),
+        ]);
+        let verdict = assign_label(&report);
+        assert_eq!(verdict.label, "HM", "{verdict:?}");
+        assert!(verdict.summary.contains("cover"), "{verdict:?}");
+    }
+
+    #[test]
+    fn actions_outside_the_list_block_hm() {
+        let report = sealed(vec![action("c2pa.opened"), action("c2pa.placed")]);
+        assert_eq!(assign_label(&report).label, "Unknown");
     }
 
     #[test]
@@ -345,6 +706,15 @@ mod tests {
     }
 
     #[test]
+    fn an_expired_certificate_blocks_hm() {
+        let mut report = capture();
+        report
+            .validation_codes
+            .push("signingCredential.expired".into());
+        assert_eq!(assign_label(&report).label, "Unknown");
+    }
+
+    #[test]
     fn untrusted_signature_cannot_claim_hm_by_naming_delta_sync() {
         let mut report = capture();
         report
@@ -353,23 +723,28 @@ mod tests {
         assert_eq!(assign_label(&report).label, "Unknown");
     }
 
-    #[test]
-    fn an_untrusted_time_stamp_authority_does_not_block_hm() {
-        let store = json!({
+    fn store_with_actions(actions: serde_json::Value) -> serde_json::Value {
+        json!({
             "active_manifest": "urn:1",
             "validation_status": [{"code": "timeStamp.untrusted"}],
             "manifests": {"urn:1": {
                 "claim_generator": "Delta Sync/0.1.0",
-                "assertions": [{"label": "c2pa.actions", "data": {"actions": [{
-                    "action": "c2pa.created",
-                    "digitalSourceType": DIGITAL_CAPTURE
-                }]}}]
+                "assertions": [{"label": "c2pa.actions.v2", "data": {"actions": actions}}]
             }},
             "validation_results": {"activeManifest": {"informational": [
                 {"code": "timeStamp.untrusted", "explanation": "timestamp cert untrusted"}
             ]}}
-        });
-        let report = report_from_store(&store, false);
+        })
+    }
+
+    #[test]
+    fn an_untrusted_time_stamp_authority_does_not_block_hm() {
+        let store = store_with_actions(json!([{
+            "action": "c2pa.created",
+            "digitalSourceType": DIGITAL_CAPTURE
+        }]));
+        let roles = HashMap::from([("urn:1".to_string(), SignerRole::Device)]);
+        let report = report_from_store_with_roles(&store, false, &roles);
         assert!(
             report.validation_codes.is_empty(),
             "{:?}",
@@ -382,33 +757,25 @@ mod tests {
     }
 
     #[test]
-    fn resized_is_a_permitted_action() {
-        let mut report = capture();
-        report.actions.push("c2pa.resized".into());
-        assert_eq!(assign_label(&report).label, "HM");
-    }
+    fn walker_reads_actions_descriptions_and_roles() {
+        let store = store_with_actions(json!([
+            {"action": "c2pa.created", "digitalSourceType": DIGITAL_CAPTURE},
+            {"action": "c2pa.edited", "description": AUDIO_REMOVED},
+            {"action": "c2pa.edited", "parameters": {"description": COVER_SELECTED}}
+        ]));
+        let unknown = report_from_store_with_roles(&store, false, &HashMap::new());
+        assert_eq!(unknown.manifests[0].role, SignerRole::Unknown);
+        assert_eq!(assign_label(&unknown).label, "Unknown");
 
-    #[test]
-    fn walker_reads_actions() {
-        let store = json!({
-            "active_manifest": "urn:1",
-            "manifests": {
-                "urn:1": {
-                    "claim_generator": "Delta Sync/0.1.0 c2pa-rs/0.91.2",
-                    "assertions": [{
-                        "label": "c2pa.actions",
-                        "data": { "actions": [{
-                            "action": "c2pa.created",
-                            "digitalSourceType": DIGITAL_CAPTURE
-                        }]}
-                    }],
-                    "signature_info": { "issuer": "CN=Delta Sync Dev CA" }
-                }
-            }
-        });
-        let report = report_from_store(&store, false);
+        let roles = HashMap::from([("urn:1".to_string(), SignerRole::Service)]);
+        let report = report_from_store_with_roles(&store, false, &roles);
         assert!(report.actions.iter().any(|a| a == "c2pa.created"));
         assert!(report.sources.iter().any(|s| s.contains("digitalCapture")));
         assert!(report.generator.contains("Delta Sync"));
+        assert_eq!(report.manifests.len(), 1);
+        assert_eq!(report.manifests[0].role, SignerRole::Service);
+        assert_eq!(report.manifests[0].actions[1].description, AUDIO_REMOVED);
+        assert_eq!(report.manifests[0].actions[2].description, COVER_SELECTED);
+        assert_eq!(report.operations, vec!["mute", "cover"]);
     }
 }

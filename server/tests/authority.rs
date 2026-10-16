@@ -539,6 +539,7 @@ async fn a_seal_never_promotes_an_unsigned_or_untrusted_source() {
     let seal = |source: &[u8], declared: bool| {
         sign_derivative(
             &state.ca,
+            &state.verify_options(),
             None,
             &SealInput {
                 original: source,
