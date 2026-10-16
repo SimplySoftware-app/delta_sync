@@ -1,4 +1,7 @@
-use std::io::Cursor;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Cursor, Read, Seek};
+use std::path::Path;
+use std::sync::Arc;
 
 use c2pa::{
     Builder, BuilderIntent, CallbackSigner, ClaimGeneratorInfo, Context, DigitalSourceType, Reader,
@@ -9,6 +12,7 @@ use ed25519_dalek::Signer;
 use rcgen::KeyPair;
 use serde_json::json;
 
+use crate::device_signer::{c2pa_signer, DeviceSigner};
 use crate::edit::Edit;
 use crate::error::CoreError;
 use crate::label::{self, LabelVerdict};
@@ -125,7 +129,26 @@ pub fn verify_bytes(
     ca_pem: &str,
     self_declared_ai: bool,
 ) -> LabelVerdict {
-    match read_report(asset, mime, ca_pem, self_declared_ai) {
+    verdict_from(read_report(asset, mime, ca_pem, self_declared_ai))
+}
+
+/// Verify a file on disk without loading it into memory.
+/// `mime` is inferred from the extension when `None`.
+pub fn verify_file(
+    path: &Path,
+    mime: Option<&str>,
+    ca_pem: &str,
+    self_declared_ai: bool,
+) -> LabelVerdict {
+    let result = mime_for(path, mime).and_then(|mime| {
+        let file = File::open(path).map_err(|e| CoreError::msg(format!("open input: {e}")))?;
+        read_report_stream(file, &mime, ca_pem, self_declared_ai)
+    });
+    verdict_from(result)
+}
+
+fn verdict_from(result: Result<label::CredentialReport, CoreError>) -> LabelVerdict {
+    match result {
         Ok(report) => {
             let mut verdict = label::assign_label(&report);
             verdict.trusted = report.embedded
@@ -147,6 +170,98 @@ pub fn verify_bytes(
             actions: vec![],
         },
     }
+}
+
+/// Sign a capture on disk with a platform-held key, streaming from `in_path`
+/// to `out_path`. Neither the asset nor the signed output is held in memory,
+/// so a long video costs the same as a short one.
+///
+/// Supports JPEG, QuickTime (`.mov`) and MP4, chosen by the extension of
+/// `in_path`. `out_path` must differ from `in_path` and is removed on failure.
+pub fn sign_capture_file(
+    in_path: &Path,
+    out_path: &Path,
+    signer: Arc<dyn DeviceSigner>,
+) -> Result<(), CoreError> {
+    let mime = mime_for(in_path, None)?;
+    if same_file(in_path, out_path) {
+        return Err(CoreError::msg("out_path must differ from in_path"));
+    }
+    let result = sign_capture_file_inner(in_path, out_path, &mime, signer);
+    if result.is_err() {
+        let _ = fs::remove_file(out_path);
+    }
+    result
+}
+
+fn sign_capture_file_inner(
+    in_path: &Path,
+    out_path: &Path,
+    mime: &str,
+    signer: Arc<dyn DeviceSigner>,
+) -> Result<(), CoreError> {
+    let signer = c2pa_signer(signer)?;
+    let mut builder = Builder::from_context(signing_context()?);
+    let mut info = ClaimGeneratorInfo::new(GENERATOR_NAME);
+    info.version = Some(VERSION.into());
+    builder.set_claim_generator_info(info);
+    builder.set_intent(BuilderIntent::Create(DigitalSourceType::DigitalCapture));
+    let mut source = File::open(in_path).map_err(|e| CoreError::msg(format!("open input: {e}")))?;
+    let mut dest = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(out_path)
+        .map_err(|e| CoreError::msg(format!("create output: {e}")))?;
+    builder
+        .sign(&signer, mime, &mut source, &mut dest)
+        .map_err(|e| CoreError::msg(e.to_string()))?;
+    Ok(())
+}
+
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+/// MIME type for the formats the file APIs accept.
+fn mime_for(path: &Path, explicit: Option<&str>) -> Result<String, CoreError> {
+    if let Some(mime) = explicit {
+        return Ok(mime.to_owned());
+    }
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "jpg" | "jpeg" => Ok("image/jpeg".into()),
+        "mov" | "qt" => Ok("video/quicktime".into()),
+        "mp4" | "m4v" => Ok("video/mp4".into()),
+        other => Err(CoreError::msg(format!(
+            "unsupported file extension '{other}': expected jpg, jpeg, mov or mp4"
+        ))),
+    }
+}
+
+/// Files above this size are staged on disk, not in memory, while signing.
+const FILE_BACKING_STORE_MB: u32 = 4;
+
+/// Context used to sign: no trust list, because the signer is the device.
+/// Trust is decided by the verifier against the authority's CA.
+fn signing_context() -> Result<Context, CoreError> {
+    let settings = json!({
+        // Past this size c2pa stages the intermediate copy in a temp file
+        // instead of RAM, so memory stays flat for long videos.
+        "core": { "backing_store_memory_threshold_in_mb": FILE_BACKING_STORE_MB },
+        "verify": { "verify_trust": false, "remote_manifest_fetch": false }
+    });
+    Context::new()
+        .with_settings(settings.to_string())
+        .map_err(|e| CoreError::msg(e.to_string()))
 }
 
 fn sign(
@@ -210,8 +325,16 @@ fn read_report(
     ca_pem: &str,
     self_declared_ai: bool,
 ) -> Result<label::CredentialReport, CoreError> {
+    read_report_stream(Cursor::new(asset), mime, ca_pem, self_declared_ai)
+}
+
+fn read_report_stream<R: Read + Seek + Send>(
+    mut stream: R,
+    mime: &str,
+    ca_pem: &str,
+    self_declared_ai: bool,
+) -> Result<label::CredentialReport, CoreError> {
     let context = verification_context(ca_pem)?;
-    let mut stream = Cursor::new(asset.to_vec());
     match Reader::from_context(context).with_stream(mime, &mut stream) {
         Ok(reader) => {
             let store: serde_json::Value =

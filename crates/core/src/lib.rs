@@ -12,6 +12,7 @@
 #[cfg(feature = "ffi")]
 uniffi::setup_scaffolding!();
 
+mod device_signer;
 mod edit;
 mod error;
 mod keys;
@@ -26,6 +27,7 @@ mod ffi_api;
 #[cfg(all(target_arch = "wasm32", not(feature = "ffi")))]
 mod wasm_api;
 
+pub use device_signer::{DeviceSigner, SignerAlg};
 pub use edit::Edit;
 pub use error::CoreError;
 pub use keys::{generate_device_key, DevAuthority, DeviceKey, IssuedCert};
@@ -33,7 +35,8 @@ pub use label::{assign_label, CredentialReport, Label, LabelVerdict};
 
 #[cfg(feature = "c2pa")]
 pub use sign::{
-    sign_capture, sign_derivative, sign_derivative_with_edits, sign_edit, verify_bytes,
+    sign_capture, sign_capture_file, sign_derivative, sign_derivative_with_edits, sign_edit,
+    verify_bytes, verify_file,
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

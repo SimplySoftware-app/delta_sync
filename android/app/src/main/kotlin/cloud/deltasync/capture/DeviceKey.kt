@@ -1,16 +1,11 @@
 package cloud.deltasync.capture
 
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import org.contentauth.c2pa.CertificateManager
-import org.contentauth.c2pa.StrongBoxSigner
-import java.security.KeyPairGenerator
-import java.security.KeyStore
-import java.security.interfaces.ECPublicKey
-import java.security.spec.ECGenParameterSpec
+import cloud.deltasync.core.KeySecurityLevel
+import cloud.deltasync.core.KeystoreDeviceSigner
+import java.security.SecureRandom
 
 data class PreparedKey(
-    val alias: String,
+    val signer: KeystoreDeviceSigner,
     val backing: String,
     val csrPem: String,
     val uncompressedPoint: ByteArray,
@@ -19,69 +14,29 @@ data class PreparedKey(
 object DeviceKey {
     const val ALIAS = "cloud.deltasync.capture.signing"
 
+    /**
+     * The signing key lives in the Android Keystore (StrongBox when the phone
+     * has it, the TEE otherwise) and is never exported. The Delta Sync core
+     * asks this signer for signatures; it never sees the key.
+     */
     fun loadOrCreate(): PreparedKey {
-        val created = ensureKey()
-        val csr = CertificateManager.createCSR(
-            ALIAS,
-            CertificateManager.CertificateConfig(commonName = "DeltaSync device"),
-        )
+        if (!KeystoreDeviceSigner.exists(ALIAS)) {
+            // The authority attests the app with Play Integrity; the key
+            // attestation challenge only has to be unpredictable here.
+            val challenge = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            KeystoreDeviceSigner.createKey(ALIAS, challenge)
+        }
+        val signer = KeystoreDeviceSigner(ALIAS)
+        val backing = when (KeystoreDeviceSigner.securityLevel(ALIAS)) {
+            KeySecurityLevel.STRONG_BOX -> "StrongBox"
+            KeySecurityLevel.TRUSTED_ENVIRONMENT -> "Android Keystore (hardware)"
+            KeySecurityLevel.SOFTWARE -> "Android Keystore (software)"
+        }
         return PreparedKey(
-            alias = ALIAS,
-            backing = created,
-            csrPem = csr,
-            uncompressedPoint = publicPoint(),
+            signer = signer,
+            backing = backing,
+            csrPem = signer.certificateRequest("DeltaSync device"),
+            uncompressedPoint = signer.publicPoint(),
         )
     }
-
-    private fun ensureKey(): String {
-        val store = keyStore()
-        if (!store.containsAlias(ALIAS)) {
-            try {
-                StrongBoxSigner.createKey(
-                    StrongBoxSigner.Config(
-                        keyTag = ALIAS,
-                        requireUserAuthentication = false,
-                    ),
-                )
-            } catch (_: Exception) {
-                generate(strongBox = false)
-            }
-        }
-        return when {
-            runCatching { StrongBoxSigner.isKeyStrongBoxBacked(ALIAS) }.getOrDefault(false) ->
-                "StrongBox"
-            runCatching { org.contentauth.c2pa.KeyStoreSigner.isKeyHardwareBacked(ALIAS) }.getOrDefault(false) ->
-                "Android Keystore (hardware)"
-            else -> "Android Keystore (software)"
-        }
-    }
-
-    private fun generate(strongBox: Boolean) {
-        val builder = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
-            .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-            .setDigests(KeyProperties.DIGEST_SHA256)
-            .setUserAuthenticationRequired(false)
-        if (strongBox) {
-            builder.setIsStrongBoxBacked(true)
-        }
-        val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
-        generator.initialize(builder.build())
-        generator.generateKeyPair()
-    }
-
-    private fun publicPoint(): ByteArray {
-        val certificate = keyStore().getCertificate(ALIAS)
-        val publicKey = certificate.publicKey as ECPublicKey
-        val x = fixed32(publicKey.w.affineX.toByteArray())
-        val y = fixed32(publicKey.w.affineY.toByteArray())
-        return byteArrayOf(0x04) + x + y
-    }
-
-    private fun fixed32(value: ByteArray): ByteArray {
-        val trimmed = if (value.size > 32) value.copyOfRange(value.size - 32, value.size) else value
-        return ByteArray(32 - trimmed.size) + trimmed
-    }
-
-    private fun keyStore(): KeyStore =
-        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 }
