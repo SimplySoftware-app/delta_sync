@@ -1,6 +1,6 @@
 # DeltaSync Deployment Guide
 
-Production for the landing is self-hosted. See the root `Dockerfile`, `docker-compose.yml`, and `.github/workflows/deploy.yml`. `vercel.json` is unchanged and is not used for `deltasync.simplysoftware.app`. The steps below are the previous Vercel setup.
+Production for the landing is self-hosted. See the root `Dockerfile`, `compose.prod.yaml`, `deploy/remote-deploy.sh`, and `.github/workflows/deploy.yml` (the image is built in CI and the server pulls it from GHCR). `vercel.json` is unchanged and is not used for `deltasync.simplysoftware.app`. The steps below are the previous Vercel setup.
 
 ## Quick Start
 
