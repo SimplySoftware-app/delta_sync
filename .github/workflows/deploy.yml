@@ -140,6 +140,21 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "IMAGE_TAG='${IMAGE_TAG}' bash '${DEPLOY_PATH}/deploy/remote-deploy.sh'"
 
+      # The GITHUB_TOKEN used for the login above expires with this job. Left in
+      # the deploy user's ~/.docker/config.json, Docker keeps sending it and any
+      # later ghcr.io pull on the VM, public images included, answers "denied"
+      # (that broke MyWedding's build of ghcr.io/astral-sh/uv on 2026-10-18).
+      - name: Log out of GHCR on the server
+        if: always()
+        run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -p "${DEPLOY_SSH_PORT}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "docker logout ghcr.io" || true
+
       - name: Remove SSH key
         if: always()
         run: rm -f ~/.ssh/deploy_key
