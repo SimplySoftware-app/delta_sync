@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3600:3000"
-    # The runtime image is node:slim with no curl or wget.
+    # The runtime image (node:22-alpine) has no curl; node is always there.
     healthcheck:
       test:
         - CMD
