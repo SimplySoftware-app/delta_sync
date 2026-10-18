@@ -1,7 +1,10 @@
 # Installed to /opt/apps/edge/sites and imported by edge-caddy.
 # edge-caddy uses host networking, so the upstream is the landing's loopback
-# port published by docker-compose.yml (127.0.0.1:3600).
+# port published by compose.prod.yaml (127.0.0.1:3600).
+# Compression happens only here: next.config.ts sets compress: false, so Next
+# does not gzip first and clients that accept it get zstd.
 
 deltasync.simplysoftware.app {
+	encode zstd gzip
 	reverse_proxy 127.0.0.1:3600
 }
