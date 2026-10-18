@@ -1,0 +1,35 @@
+# Production only. The local build stack stays in docker-compose.yml.
+#
+# The image is built in GitHub Actions and pulled by the server (see
+# .github/workflows/deploy.yml). edge-caddy runs with host networking, so it
+# reaches the landing on the VM loopback: 127.0.0.1:3600 is not a public port,
+# and deploy/caddy/deltasync.simplysoftware.app.caddy proxies to it.
+# Port 3600 must match that snippet and deploy/remote-deploy.sh.
+
+# Same project name the host-built stack used, so the first pull replaces it in place.
+name: delta_sync
+
+services:
+  landing:
+    container_name: delta-sync-landing
+    image: ghcr.io/simplysoftware-app/delta_sync:${IMAGE_TAG:?IMAGE_TAG is required}
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3600:3000"
+    # The runtime image (node:22-alpine) has no curl; node is always there.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

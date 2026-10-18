@@ -1,8 +1,8 @@
-# DeltaSync landing behind edge-caddy.
+# Local build of the landing, for trying the production image on a laptop.
+# Production does not build: it pulls the image from GHCR with compose.prod.yaml.
 #
-# edge-caddy runs with host networking, so it reaches this service on the VM
-# loopback. The landing publishes 127.0.0.1:3600 only (not a public port) and
-# deploy/caddy/deltasync.simplysoftware.app.caddy proxies to it.
+# This publishes 127.0.0.1:3600 only (not a public port), the same loopback
+# port compose.prod.yaml uses behind edge-caddy.
 
 services:
   landing:
@@ -10,9 +10,10 @@ services:
     image: delta-sync-landing:local
     container_name: delta-sync-landing
     restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      HOSTNAME: 0.0.0.0
-      PORT: "3000"
     ports:
       - "127.0.0.1:3600:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

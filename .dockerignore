@@ -1,19 +1,35 @@
 node_modules
 .next
+out
 .git
 .github
 .vercel
+.vercelignore
+vercel.json
 .env
 .env.*
+# Rust workspace (the web build never reads it). /target/ is the 7.9 GB cargo
+# output, mirrored in .gitignore.
+/target
 server
 crates
-target
+sdk
+trust
+scripts
 Cargo.toml
 Cargo.lock
 rust-toolchain.toml
+# Mobile apps and docs.
 ios
 android
 docs
+# Deploy files are not part of the image; editing them must not bust the build cache.
+deploy
+Dockerfile
+docker-compose.yml
+compose.prod.yaml
+LICENSE
+NOTICE
 coverage
 npm-debug.log*
 *.md
