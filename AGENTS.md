@@ -5,9 +5,16 @@ DeltaSync is a C2PA media-provenance system: a Rust signing authority (`server/`
 Read before changing anything:
 
 1. [README.md](README.md) — the landing, and how it reaches production (GHCR image, `deploy.yml`, edge-caddy).
-2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the trust chain, what is real versus stubbed. [server/README.md](server/README.md) is the source for the PKI, endpoints, sealing and time-stamps; [docs/external-cameras.md](docs/external-cameras.md) for third-party cameras.
+2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the trust chain, what is real versus stubbed, and the key decisions.
 
-Known code flaws: [INCONSISTENCIES.md](INCONSISTENCIES.md) — delete entries you resolve. `DEPLOYMENT.md` and `DOMAIN_SETUP.md` are legacy Vercel/GoDaddy notes, not the current process.
+Known code flaws: [INCONSISTENCIES.md](INCONSISTENCIES.md) — delete entries you resolve.
+
+## Reference (read when needed)
+
+- [server/README.md](server/README.md) — PKI, endpoints, sealing, time-stamps, running behind Caddy. Read before touching the signing server.
+- [docs/external-cameras.md](docs/external-cameras.md) — how third-party cameras are accepted through the pinned C2PA trust lists (Spanish). Read before touching `trust/` or `external_trust.rs`.
+- [docs/RELEASES.md](docs/RELEASES.md) — release artifacts and how consumers pull them (Spanish).
+- [ios/README.md](ios/README.md) and [android/README.md](android/README.md) — building the apps and the Apple and Google account setup. [sdk/swift](sdk/swift/README.md) and [sdk/kotlin](sdk/kotlin/README.md) — the hardware-key bindings and their tests.
 
 ## Non-negotiable rules
 

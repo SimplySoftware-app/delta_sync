@@ -43,41 +43,16 @@ Challenges live in the memory of one process for five minutes and are single-use
 - Challenges are not shared across processes. OCSP is not embedded. C2PA reports `signingCredential.ocsp.skipped`.
 - Verification trusts the DeltaSync CA for manifests this CA issued. Third-party cameras are accepted only through the pinned official C2PA lists, under the rules in [external-cameras.md](external-cameras.md).
 
-## HTTP
+## Key decisions and caveats (why it is this way)
 
-| Method | Path | Role |
-| --- | --- | --- |
-| GET | `/health` | Mode and CA fingerprint |
-| POST | `/v1/challenge` | `{ "platform": "ios" \| "android" }` |
-| POST | `/v1/device-certificate` | CSR plus attestation, returns the device certificate |
-| POST | `/v1/verify` | Raw asset body; returns the HM / AI / Unknown label |
-| POST | `/verify` | Multipart field `file`; raw C2PA validation |
-| POST | `/internal/seal` | Media processor only; bearer token, see [server/README.md](../server/README.md#sealing-post-internalseal) |
+- **One source of truth for C2PA signing** — this repository owns capture, edits and derivatives. Consumers take `delta_sync_core` as a git dependency pinned to a tag, or the release artifacts ([RELEASES.md](RELEASES.md)).
+- **The server signs edits, the device only signs captures** — derivatives are sealed by the service certificate with the original as `parentOf` ([server/README.md](../server/README.md#sealing-post-internalseal)), so a seal never turns something into HM.
+- **The issuing ICA decides what a manifest may claim** (`role_of_chain` in `crates/core/src/sign.rs`, rules in `label.rs`). The chain is validated against our root first, so only the root can issue a certificate named like one of our ICAs. A Device ICA manifest may only create (`digitalCapture`) or open; a Service ICA manifest may only edit, and `c2pa.edited` counts only with the "audio removed" or "cover frame selected" description; it can never create a capture. One manifest from any other signer leaves the whole chain Unknown. External cameras are the one exception, under [external-cameras.md](external-cameras.md).
+- **Memory** — the core reads and writes assets as files and c2pa leaves its intermediate on disk above 4 MB, so the peak is set by c2pa 0.91.2's hash buffer (up to 256 MB per range, fixed in its code), not by the file size.
+- **Time-stamps** — a device certificate lives minutes, so a capture only verifies after it expires if verification trusts the root of the time-stamp authority ([server/README.md](../server/README.md#time-stamps)). Tests never use the network.
 
-On Hetzner, `server/docker-compose.yml` joins an external Docker network named `caddy` and publishes no host port. Caddy proxies to `http://delta-sync:8080`. Do not add a `127.0.0.1` port mapping. The process inside the container binds `0.0.0.0:8080` so the proxy can reach it. See `server/deploy/Caddyfile.snippet`.
+## Where the details live
 
-## What Carlos does on his Mac
-
-You need a Mac with Xcode 26 for the iOS app, and Android Studio for the Android app. The server is Rust and can run on the Mac with `cd server && cargo run` after copying `server/.env.example` to `server/.env`. Leave `ATTESTATION_MODE=stub` until the accounts below exist. Point each phone at `http://<this Mac's LAN address>:8080`. The iOS app allows local HTTP. The Android app allows cleartext HTTP so a development server works; do not ship that setting.
-
-### Apple
-
-1. Enroll in the Apple Developer Program.
-2. Register an explicit App ID. The project uses `cloud.deltasync.capture`. Enable the App Attest capability.
-3. Open `ios/DeltaSync.xcodeproj` in Xcode 26. Set the Team. Let Xcode manage signing. If you change the bundle id, change the App ID field in the app to `<TeamID>.<bundle id>` and, for live mode, set `ALLOWED_APP_IDS` to that same value.
-4. Use a physical iPhone on iOS 16 or later. The Secure Enclave and App Attest are not available in the Simulator. Plug it in, trust the developer certificate, and run the DeltaSync scheme.
-5. In the app, set the server URL, tap Prepare device, then Capture and sign. Share the JPEG and upload it to `POST /verify`.
-6. The entitlement is `development`. Switch `DeltaSync.entitlements` to `production` only for a distribution build, and use a production App Attest key. Development and production AAGUIDs are both accepted.
-
-### Google
-
-1. Create a Play Console app with application id `cloud.deltasync.capture`.
-2. Link a Google Cloud project and enable the Play Integrity API. Put that project's number in the Android app. It is not a secret, but it is account-specific, so it is not committed.
-3. Create a service account that Play Console allows to decode integrity tokens. Download its JSON and set `GOOGLE_PLAY_CREDENTIALS_FILE` to that path. Do not commit the JSON.
-4. Set `ALLOWED_ANDROID_PACKAGES=cloud.deltasync.capture` and `ATTESTATION_MODE=live`.
-5. Install the app from an internal testing track on a physical phone. Play Integrity returns `PLAY_RECOGNIZED` for that install, not for a USB sideload. StrongBox needs a device that has it; otherwise the app uses the strongest Keystore backing the phone has and says so on screen.
-6. `cd android && ./gradlew :app:assembleDebug` needs Android SDK 36. Android Studio will install it.
-
-### First run without those accounts
-
-Run the server in stub mode. On the iPhone simulator, turn on "Simulator software key". On Android, turn on "Continue without Play Integrity". You can exercise capture and C2PA signing. The certificate is real and `/verify` will trust it, but the hardware attestation was not checked. The response says so.
+- Run the server: [server/README.md](../server/README.md), including endpoints, the Hetzner and Caddy setup and the PKI.
+- Apple Developer and App Attest setup: [ios/README.md](../ios/README.md). Google Play Console and Play Integrity setup: [android/README.md](../android/README.md).
+- Releases and how to consume them: [RELEASES.md](RELEASES.md).
