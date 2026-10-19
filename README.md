@@ -12,7 +12,7 @@ DeltaSync is open-source media provenance built on C2PA. A Rust signing authorit
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 20.9+ (Next.js 16 requires it; the image uses Node 22)
 - npm or yarn
 
 ### Installation
@@ -46,7 +46,7 @@ npm start
 Production is the Next.js landing on the Hetzner host, at [deltasync.simplysoftware.app](https://deltasync.simplysoftware.app). The server never builds it. A push to `main` runs `.github/workflows/deploy.yml`:
 
 1. The `image` job builds the root `Dockerfile` and pushes `ghcr.io/simplysoftware-app/delta_sync:<commit sha>` to GHCR.
-2. The `deploy` job (one at a time, `concurrency: deploy-delta-sync`) rsyncs only `compose.prod.yaml` and `deploy/` to `/opt/apps/delta_sync`, logs the server in to GHCR with the job token, and runs `deploy/remote-deploy.sh` with `IMAGE_TAG`. That script pulls the image, recreates the container (it publishes `127.0.0.1:3600` only, which the host-networked `edge-caddy` proxies to), checks that the landing answers, installs `deploy/caddy/deltasync.simplysoftware.app.caddy` into `/opt/apps/edge/sites` and reloads `edge-caddy`.
+2. The `deploy` job (one at a time, `concurrency: deploy-delta-sync`) rsyncs only `compose.prod.yaml` and `deploy/` to `/opt/apps/delta_sync`, logs the server in to GHCR with the job token (the job needs `packages: read` to pull the private image), and runs `deploy/remote-deploy.sh` with `IMAGE_TAG`. That script pulls the image, recreates the container (it publishes `127.0.0.1:3600` only, which the host-networked `edge-caddy` proxies to), checks that the landing answers, installs `deploy/caddy/deltasync.simplysoftware.app.caddy` into `/opt/apps/edge/sites` and reloads `edge-caddy`. A last step always runs `docker logout ghcr.io` on the server: the job token expires with the job, and a stale one left in the deploy user's Docker config makes every later `ghcr.io` pull on that host fail with "denied", public images included.
 
 Secrets in the `production` environment: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and optionally `DEPLOY_SSH_PORT` (22 when unset).
 
@@ -88,10 +88,12 @@ For inquiries, visit [deltasync.simplysoftware.app](https://deltasync.simplysoft
 
 ## Capture v1
 
-The site above is unchanged. Device capture lives in three new folders:
+The site above is unchanged. Device capture lives in these folders:
 
 - `server/` is the Rust signing authority and C2PA `/verify` service.
+- `crates/core/` is the shared Rust signing and verification core (`delta_sync_core`), with `sdk/swift` and `sdk/kotlin` as its hardware-key bindings.
 - `ios/` is the SwiftUI camera app.
 - `android/` is the Compose camera app.
+- `trust/` holds the pinned official C2PA trust lists used for external cameras ([docs/external-cameras.md](docs/external-cameras.md)); `.github/workflows/c2pa-trust-update.yml` refreshes them weekly.
 
 The trust chain, what is real, and what is stubbed are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

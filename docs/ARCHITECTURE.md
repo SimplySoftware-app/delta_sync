@@ -14,11 +14,11 @@ leave the chip
 1. The phone creates a P-256 key in secure hardware. iOS uses the Secure Enclave. Android prefers StrongBox and falls back to the hardware-backed Android Keystore, then to a software Keystore key if the device has neither.
 2. The phone proves it holds that key by signing a PKCS#10 request. The private key is not sent anywhere.
 3. The phone binds the key to a one-time server challenge. The binding is `SHA-256(challenge UTF-8 || 0x00 || uncompressed P-256 point)`. App Attest uses those 32 bytes as `clientDataHash`. Play Integrity uses the base64url form of that hash as the nonce.
-4. The server checks the platform attestation when `ATTESTATION_MODE=live`, then signs a certificate for the key. The certificate lasts `DEVICE_CERT_TTL_SECONDS` (15 minutes unless you change it) and carries `id-kp-emailProtection`, which C2PA requires of a signing certificate.
+4. The server checks the platform attestation when `ATTESTATION_MODE=live`, then signs a certificate for the key. The certificate lasts `DEVICE_CERT_TTL_SECONDS` (15 minutes unless you change it) and carries the C2PA claim-signing EKU (extended key usage, the certificate field that says what a key may sign), `1.3.6.1.4.1.62558.2.1`, which C2PA requires of a signing certificate.
 5. The phone signs the C2PA manifest locally. c2pa-rs (through the official Swift and Android bindings) hashes the JPEG and asks the hardware key for an ES256 signature.
-6. `POST /verify` reads the manifest with c2pa-rs 0.91.2 and trusts the DeltaSync CA that issued the device certificate.
+6. `POST /verify` reads the manifest with c2pa-rs 0.91.2 and trusts the DeltaSync root that issued the device certificate.
 
-The CA private key is created on first boot in `DATA_DIR` (`ca.key.pem`, mode 0600) or loaded from `CA_CERT_PATH` and `CA_KEY_PATH`. It is not in this repository. Back it up. A new CA makes older device certificates fail verification.
+The PKI is a root with two intermediate CAs (ICAs), a Device ICA for captures and a Service ICA for server seals, generated on first boot in `DATA_DIR` (keys mode 0600) or loaded from paths; the root key is not kept. No key is in this repository. Back up the ICA keys. A new hierarchy makes older device certificates fail verification. Details: [server/README.md](../server/README.md#pki).
 
 Challenges live in the memory of one process for five minutes and are single-use. A second replica will not see them.
 
@@ -26,7 +26,7 @@ Challenges live in the memory of one process for five minutes and are single-use
 
 - C2PA manifest creation and validation, including the asset hash, the ES256 signature, and trust of the DeltaSync CA. The server test signs a JPEG with an issued device certificate and `/verify` returns `Trusted`. A changed scan byte no longer validates.
 - PKCS#10 proof of possession. A certificate is not issued for a key the caller cannot sign with, including in stub mode.
-- Short-lived X.509 device certificates with the C2PA end-entity profile (version 3, digitalSignature, emailProtection, authority key identifier).
+- Short-lived X.509 device certificates with the C2PA end-entity profile (version 3, digitalSignature, claim-signing EKU, authority key identifier).
 - iOS Secure Enclave key creation and signing through `SecureEnclaveDeviceSigner` (`sdk/swift`), which the Rust core calls over UniFFI to sign the C2PA claim. The private key is not exported.
 - App Attest on a physical iPhone: `DCAppAttestService.generateKey` and `attestKey`.
 - Live App Attest checking on the server: CBOR attestation, x5c chain to the public Apple App Attestation Root CA, the nonce over `authData || clientDataHash`, `rpIdHash` against the app id, counter 0, the development or production AAGUID, and the credential id. A fixture chain that does not end at Apple's root is rejected. That root certificate is public and is the only PEM committed under `server/certs/`.
@@ -40,8 +40,8 @@ Challenges live in the memory of one process for five minutes and are single-use
 - The iOS Simulator cannot use the Secure Enclave or App Attest. A debug build has a switch that creates an ordinary keychain key and skips App Attest. That path is labeled in the UI and is not a hardware proof. It only works against a stub server.
 - Android emulators usually have no StrongBox. The app records the backing it actually got (StrongBox, hardware Keystore, or software Keystore). "Continue without Play Integrity" skips the token and is only for a stub server. A sideloaded build will not receive `PLAY_RECOGNIZED`.
 - The mobile apps capture a JPEG. The server also accepts PNG, WebP, and MP4 on `/verify`. Video capture is not in the apps.
-- Challenges are not shared across processes. OCSP and a trusted timestamp are not embedded. C2PA reports `signingCredential.ocsp.skipped`.
-- Verification trusts the DeltaSync CA for manifests this CA issued. It does not add the public C2PA trust list.
+- Challenges are not shared across processes. OCSP is not embedded. C2PA reports `signingCredential.ocsp.skipped`.
+- Verification trusts the DeltaSync CA for manifests this CA issued. Third-party cameras are accepted only through the pinned official C2PA lists, under the rules in [external-cameras.md](external-cameras.md).
 
 ## HTTP
 
@@ -50,7 +50,9 @@ Challenges live in the memory of one process for five minutes and are single-use
 | GET | `/health` | Mode and CA fingerprint |
 | POST | `/v1/challenge` | `{ "platform": "ios" \| "android" }` |
 | POST | `/v1/device-certificate` | CSR plus attestation, returns the device certificate |
-| POST | `/verify` | Multipart field `file` |
+| POST | `/v1/verify` | Raw asset body; returns the HM / AI / Unknown label |
+| POST | `/verify` | Multipart field `file`; raw C2PA validation |
+| POST | `/internal/seal` | Media processor only; bearer token, see [server/README.md](../server/README.md#sealing-post-internalseal) |
 
 On Hetzner, `server/docker-compose.yml` joins an external Docker network named `caddy` and publishes no host port. Caddy proxies to `http://delta-sync:8080`. Do not add a `127.0.0.1` port mapping. The process inside the container binds `0.0.0.0:8080` so the proxy can reach it. See `server/deploy/Caddyfile.snippet`.
 
