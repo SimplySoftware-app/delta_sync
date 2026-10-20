@@ -63,18 +63,10 @@ aparece en el JSON, el almacén no carga y todo es Unknown). Para cada producto:
    curada para un producto cuyo vínculo se puede derivar también lo deja sin
    vínculo: la tabla no puede ampliar en silencio lo derivado.
 
-Vínculos con el commit `b842170c71` (fijados por un test):
-
-| Producto | Vínculo | Emisores |
-|---|---|---|
-| Google LLC / Pixel Camera | derivado | Google LLC |
-| Whole Earth Labs LLC / RealReel Android | derivado | Whole Earth Labs LLC |
-| EZDRM, INC / DynamicSigner | curado | DigiCert, Inc.; SSL Corporation; TrustAsia Technologies, Inc. |
-| Evergreen Labs / GreenCheckmark - Android | curado | ídem |
-| Nuevo.Studio LLC / VWFNDR MBL Android | curado | ídem |
-| Qualcomm Technologies, Inc. / Snapdragon 8 Elite Gen 5 | curado | ídem |
-| Rheely Inc. / Rheely for Android | curado | ídem |
-| UX Vision LLC / Stroma | curado | ídem |
+Con el commit `b842170c71` (fijado por un test), dos productos se vinculan por
+derivación (Google LLC / Pixel Camera y Whole Earth Labs LLC / RealReel Android)
+y seis por la tabla curada. `scripts/update-c2pa-trust.py --list-bindings`
+imprime la lista completa.
 
 Los seis curados no tienen ancla propia y no hay fuente pública que diga qué
 CA emite sus certificados. Se limitan a las tres CAs comerciales auditadas
@@ -120,20 +112,11 @@ protegida por el hardware. El nivel 1 no la exige. El
 umbral es una constante en el código: solo se cambia con un PR, no en tiempo de
 ejecución.
 
-## Productos elegibles (commit `b842170c71`)
+## Productos elegibles
 
-Generado por `TrustStore::eligible_products` y fijado por un test:
-
-| Organización | Producto |
-|---|---|
-| Google LLC | Pixel Camera |
-| Qualcomm Technologies, Inc. | Snapdragon 8 Elite Gen 5 |
-| UX Vision LLC | Stroma |
-| Whole Earth Labs LLC | RealReel Android |
-| Rheely Inc. | Rheely for Android |
-| Nuevo.Studio LLC | VWFNDR MBL Android |
-| Evergreen Labs | GreenCheckmark - Android |
-| EZDRM, INC | DynamicSigner |
+La lista la genera `TrustStore::eligible_products` y la fija un test; con los
+ficheros vendorizados, `scripts/update-c2pa-trust.py --list-eligible` la imprime
+sin red. Hoy son ocho.
 
 Se excluye a quien tiene `capturedMedia` en `disallowedSignals`, porque no
 puede declarar una captura (por ejemplo Eddie AI).

@@ -71,7 +71,7 @@ curl -F "file=@photo.jpg" https://<your-server>/verify
 # locally: curl -F "file=@photo.jpg" http://localhost:8080/verify
 ```
 
-Use this endpoint rather than a generic Content Credentials viewer such as contentcredentials.org/verify: those viewers trust the public C2PA list, and DeltaSync signs with its own certificate authority (`ca.crt.pem`), so they will not show it as trusted.
+Use this endpoint rather than a generic Content Credentials viewer such as contentcredentials.org/verify: those viewers trust the public C2PA list, and DeltaSync signs with its own certificate authority (`root.crt.pem`), so they will not show it as trusted.
 
 ## Hetzner and Caddy
 
@@ -82,10 +82,4 @@ cp .env.example .env          # set live values before a public host
 docker compose up -d --build
 ```
 
-Compose joins the external network named `caddy` (override with `CADDY_DOCKER_NETWORK`) and does not publish a host port. Caddy proxies to `http://delta-sync:8080`. See `deploy/Caddyfile.snippet`.
-
-## Tests
-
-```bash
-cargo test --workspace   # from the repo root; `cargo test` inside server/ also works
-```
+Compose joins the external network named `caddy` (override with `CADDY_DOCKER_NETWORK`) and does not publish a host port. Caddy proxies to `http://delta-sync:8080`. Do not add a `127.0.0.1` port mapping: the process inside the container binds `0.0.0.0:8080` so the proxy can reach it. See `deploy/Caddyfile.snippet`. The image builds with the repository root as its context (`server/docker-compose.yml` sets it), because the server depends on `crates/core`; build it through compose, not from inside `server/`.

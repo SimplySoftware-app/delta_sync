@@ -15,15 +15,6 @@ Para publicar: `git tag v0.2.0 && git push origin v0.2.0`. `workflow_dispatch` s
 construye y deja los artefactos en la ejecución, sin crear Release. El workflow no crea
 etiquetas ni releases por su cuenta.
 
-Pruebas locales de los pasos de empaquetado:
-
-```sh
-sdk/swift/scripts/build-xcframework.sh
-scripts/release/package-apple.sh dist
-cp sdk/kotlin/build/outputs/aar/sdk-release.aar dist/delta-sync-core-release.aar   # tras ./gradlew :sdk:assembleRelease
-scripts/release/checksums.sh dist
-```
-
 ## Rust (Cargo, dependencia git fijada a etiqueta)
 
 ```toml

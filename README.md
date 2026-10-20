@@ -54,7 +54,7 @@ The landing is not a static export. The root layout reads the `locale` cookie an
 
 To run the production image on a laptop, build it with `docker compose up -d --build` (`docker-compose.yml`, `127.0.0.1:3600`).
 
-`vercel.json` and `.vercelignore` remain from the previous Vercel host. They are not how this landing is served. The old Vercel and GoDaddy notes are in `DEPLOYMENT.md` and `DOMAIN_SETUP.md`.
+`vercel.json` and `.vercelignore` remain from the previous Vercel host. They are not how this landing is served.
 
 ## Tech Stack
 
