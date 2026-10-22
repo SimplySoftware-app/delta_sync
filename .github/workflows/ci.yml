@@ -9,6 +9,31 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Decide whether the Android build is needed. The Android job is a required
+  # check, so it must always report a result: a plain `paths:` filter on the
+  # workflow would leave it pending forever. A job skipped through `if:` counts
+  # as passing for required checks.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            android:
+              - 'android/**'
+              - 'sdk/kotlin/**'
+              - 'crates/**'
+              - 'trust/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.github/workflows/ci.yml'
+
   server:
     name: Server tests
     runs-on: ubuntu-latest
@@ -20,6 +45,10 @@ jobs:
 
   android:
     name: Android assembleDebug
+    needs: changes
+    # Always build on push to main and manual runs; on PRs only when Android
+    # inputs changed.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
