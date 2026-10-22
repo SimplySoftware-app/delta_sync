@@ -193,9 +193,9 @@ const en: Dictionary = {
   about: {
     metaTitle: "About us — DeltaSync",
     metaDescription:
-      "Simply Software makes simple, cheap, secure, reliable apps, with no ads, nag emails or addictive patterns. DeltaSync is open source.",
+      "Simply Software makes simple, fair, secure, reliable apps, with no ads, nag emails or addictive patterns. DeltaSync is open source.",
     title: "About us",
-    lead: "Simply Software makes simple, cheap, secure, reliable apps.",
+    lead: "Simply Software makes simple, fair, secure, reliable apps.",
     body: "The apps have no ads, no nag emails and no addictive patterns. DeltaSync is one of them: open-source verifiable photo provenance, a set of SDKs and a protocol based on C2PA.",
     more: "See more from Simply Software",
     code: "DeltaSync on GitHub",
@@ -302,9 +302,9 @@ const es: Dictionary = {
   about: {
     metaTitle: "Sobre nosotros — DeltaSync",
     metaDescription:
-      "Simply Software hace aplicaciones simples, baratas, seguras y fiables, sin anuncios, correos insistentes ni patrones adictivos. DeltaSync es de código abierto.",
+      "Simply Software hace aplicaciones simples, justas, seguras y fiables, sin anuncios, correos insistentes ni patrones adictivos. DeltaSync es de código abierto.",
     title: "Sobre nosotros",
-    lead: "Simply Software hace aplicaciones simples, baratas, seguras y fiables.",
+    lead: "Simply Software hace aplicaciones simples, justas, seguras y fiables.",
     body: "Las aplicaciones no tienen anuncios, ni correos insistentes, ni patrones adictivos. DeltaSync es una de ellas: origen verificable de fotos en código abierto, un conjunto de SDKs y un protocolo basado en C2PA.",
     more: "Ver más de Simply Software",
     code: "DeltaSync en GitHub",
