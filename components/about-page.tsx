@@ -24,10 +24,10 @@ export function AboutPage({
       </p>
       <div className="flex flex-wrap gap-3">
         <Button asChild>
-          <a href={links.simply}>{copy.more}</a>
+          <a href={links.simply} data-umami-event="about_simply">{copy.more}</a>
         </Button>
         <Button asChild variant="outline">
-          <a href={links.repo} target="_blank" rel="noopener noreferrer">
+          <a href={links.repo} data-umami-event="about_github" target="_blank" rel="noopener noreferrer">
             {copy.code}
             <span className="sr-only"> ({chrome.opensInNewTab})</span>
           </a>
