@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { ThemeProvider } from "@/components/theme-provider"
+import { UMAMI_SCRIPT_URL, UMAMI_WEBSITE_ID } from "@/lib/analytics"
 import { getCopy, pageUrl } from "@/lib/copy"
 import { getLocale } from "@/lib/get-locale"
 
@@ -56,6 +57,11 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} className="h-full scroll-smooth" suppressHydrationWarning>
+      <head>
+        {UMAMI_WEBSITE_ID && (
+          <script defer src={UMAMI_SCRIPT_URL} data-website-id={UMAMI_WEBSITE_ID} />
+        )}
+      </head>
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased">
         <ThemeProvider
           attribute="class"

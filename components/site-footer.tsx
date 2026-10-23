@@ -9,12 +9,14 @@ export function SiteFooter({ copy }: { copy: ChromeCopy }) {
         <p className="text-sm font-medium text-foreground">{copy.product}</p>
         <a
           href={links.simply}
+          data-umami-event="footer_simply"
           className="w-fit rounded-[10px] text-sm text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           {copy.credit}
         </a>
         <a
           href={`mailto:${links.contact}`}
+          data-umami-event="contact_email"
           className="w-fit rounded-[10px] text-sm text-muted-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           {links.contact}

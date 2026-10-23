@@ -40,6 +40,7 @@ export function HomePage({
           {copy.leadBefore}
           <a
             href={links.c2pa}
+            data-umami-event="c2pa_link"
             target="_blank"
             rel="noopener noreferrer"
             className={linkClass}
@@ -51,13 +52,13 @@ export function HomePage({
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <Button asChild>
-            <a href={links.verify} target="_blank" rel="noopener noreferrer">
+            <a href={links.verify} data-umami-event="cta_verify" target="_blank" rel="noopener noreferrer">
               {copy.cta}
               {newTab}
             </a>
           </Button>
           <Button asChild variant="outline">
-            <a href={links.repo} target="_blank" rel="noopener noreferrer">
+            <a href={links.repo} data-umami-event="cta_github" target="_blank" rel="noopener noreferrer">
               {copy.secondaryCta}
               {newTab}
             </a>
@@ -108,6 +109,8 @@ export function HomePage({
                     {pillar.action && (
                       <a
                         href={pillar.action.href}
+                        data-umami-event="pillar_action"
+                        data-umami-event-pillar={pillar.title}
                         target="_blank"
                         rel="noopener noreferrer"
                         className={`${linkClass} w-fit text-sm`}
@@ -151,6 +154,8 @@ export function HomePage({
                 <span className="flex flex-col gap-1 sm:items-end">
                   <a
                     href={pkg.repoHref}
+                    data-umami-event="package_github"
+                    data-umami-event-package={pkg.title}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`${linkClass} w-fit text-sm`}
@@ -160,6 +165,8 @@ export function HomePage({
                   </a>
                   <a
                     href={pkg.href}
+                    data-umami-event="package_registry"
+                    data-umami-event-package={pkg.title}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`${linkClass} w-fit text-sm`}
