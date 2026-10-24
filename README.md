@@ -13,18 +13,18 @@ DeltaSync is open-source media provenance built on C2PA. A Rust signing authorit
 ### Prerequisites
 
 - Node.js 20.9+ (Next.js 16 requires it; the image uses Node 22)
-- npm or yarn
+- Bun 1.4+ (package manager; `packageManager` in `package.json` pins the version)
 
 ### Installation
 
 ```bash
-npm install
+bun install
 ```
 
 ### Development
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to view the site.
@@ -32,13 +32,13 @@ Open [http://localhost:3000](http://localhost:3000) to view the site.
 ### Build
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Production
 
 ```bash
-npm start
+bun run start
 ```
 
 ## Deployment

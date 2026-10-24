@@ -30,4 +30,4 @@ Known code flaws: [INCONSISTENCIES.md](INCONSISTENCIES.md) — delete entries yo
 ## Local verification
 
 - Rust (server, core): `cargo test --workspace --locked`, toolchain pinned in `rust-toolchain.toml`. This is what `ci.yml` runs.
-- Landing: `npm run build`. CI does not build or lint it; the deploy image build is the first gate.
+- Landing: `bun run build` (Bun is the package manager; the image runs the standalone server on Node). CI does not build or lint it; the deploy image build is the first gate.
