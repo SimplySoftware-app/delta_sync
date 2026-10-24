@@ -1,16 +1,18 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm-slim AS deps
+# Bun installs and builds; the standalone server still runs on Node.
+# Bun >= 1.4.0: next build on Bun's runtime segfaulted before oven-sh/bun#36866.
+FROM oven/bun:1.4.0 AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
-FROM node:22-bookworm-slim AS build
+FROM oven/bun:1.4.0 AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN bun run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
