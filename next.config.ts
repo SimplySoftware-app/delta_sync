@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "*": ["node_modules/@img/**", "node_modules/sharp/**", "node_modules/typescript/**"],
   },
+  experimental: {
+    // `next upgrade --agent` with no type applies security patches only.
+    agentUpgrade: "security",
+  },
 };
 
 export default nextConfig;
