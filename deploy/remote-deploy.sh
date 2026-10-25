@@ -24,7 +24,7 @@ BLUE_PORT=3650
 GREEN_PORT=3651
 INNER_PORT=3000
 HEALTH_TIMEOUT=180                       # seconds to wait for "healthy"
-CADDY_SETTLE=6                           # one Caddy health interval (2s) + margin
+CADDY_SETTLE="${CADDY_SETTLE_SECONDS:-6}" # one Caddy health interval (2s) + margin
 DRAIN_SECONDS=30                         # matches stop_grace_period
 
 STATE_FILE="${APP_DIR}/.active-color"
@@ -136,12 +136,24 @@ if ! curl -fsS --max-time 5 -o /dev/null "http://127.0.0.1:${IDLE_PORT}/"; then
 fi
 echo "${IDLE_CONTAINER} healthy on 127.0.0.1:${IDLE_PORT}"
 
-# --- Make sure edge lists both ports (first deploy) and has seen the new colour ---
+# --- Edge: list both ports, new colour first, and wait until Caddy has seen it ---
 # One file. Do not rewrite the shared Caddyfile or any other site. Installed
 # before the old container goes away: on the first deploy the previous snippet
 # only knows the legacy port.
 install -d "${EDGE_SITES}"
-install -m 644 "${SNIPPET}" "${EDGE_SITES}/${SITE_NAME}"
+# The snippet is written blue-first. The NEW colour must come first: with
+# published ports (docker-proxy) the old colour keeps accepting TCP while it
+# drains and then resets the connection, which Caddy does not retry as a dial
+# error. `lb_policy first` then sends every new request to the new colour
+# before the old one gets SIGTERM.
+RENDERED="$(mktemp)"
+trap 'rm -f "${RENDERED}"' EXIT
+if [[ "${IDLE}" == green ]]; then
+  sed -E 's/^([[:space:]]*reverse_proxy) ([^[:space:]{]+) ([^[:space:]{]+)/\1 \3 \2/' "${SNIPPET}" > "${RENDERED}"
+else
+  cp "${SNIPPET}" "${RENDERED}"
+fi
+install -m 644 "${RENDERED}" "${EDGE_SITES}/${SITE_NAME}"
 docker exec "${EDGE_CONTAINER}" caddy reload --config /etc/caddy/Caddyfile
 sleep "${CADDY_SETTLE}"
 
