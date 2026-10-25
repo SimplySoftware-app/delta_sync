@@ -2,34 +2,53 @@
 #
 # The image is built in GitHub Actions and pulled by the server (see
 # .github/workflows/deploy.yml). edge-caddy runs with host networking, so it
-# reaches the landing on the VM loopback: 127.0.0.1:3600 is not a public port,
-# and deploy/caddy/deltasync.simplysoftware.app.caddy proxies to it.
-# Port 3600 must match that snippet and deploy/remote-deploy.sh.
+# reaches the landing on the VM loopback, not on a public port.
+#
+# Blue/green: the landing is defined twice on two fixed loopback ports and
+# deploy/remote-deploy.sh starts the idle colour, waits until it is healthy and
+# only then stops the old one. deploy/caddy/deltasync.simplysoftware.app.caddy
+# lists both ports and sends traffic only to the healthy ones. The ports
+# (3650 blue, 3651 green) must match that snippet and deploy/remote-deploy.sh.
+# Manual compose commands need IMAGE_TAG_BLUE and IMAGE_TAG_GREEN; the deploy
+# script keeps both in the server .env.
 
 # Same project name the host-built stack used, so the first pull replaces it in place.
 name: delta_sync
 
+x-landing: &landing
+  pull_policy: always
+  restart: unless-stopped
+  # Lets in-flight requests finish when the old colour is stopped.
+  stop_grace_period: 30s
+  # The runtime image (node:22-alpine) has no curl; node is always there.
+  # A short interval so the deploy script sees "healthy" within seconds.
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+    interval: 5s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
-  landing:
-    container_name: delta-sync-landing
-    image: ghcr.io/simplysoftware-app/delta_sync:${IMAGE_TAG:?IMAGE_TAG is required}
-    pull_policy: always
-    restart: unless-stopped
+  landing-blue:
+    <<: *landing
+    container_name: delta-sync-landing-blue
+    image: ghcr.io/simplysoftware-app/delta_sync:${IMAGE_TAG_BLUE:?IMAGE_TAG_BLUE is required}
     ports:
-      - "127.0.0.1:3600:3000"
-    # The runtime image (node:22-alpine) has no curl; node is always there.
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - "127.0.0.1:3650:3000"
+
+  landing-green:
+    <<: *landing
+    container_name: delta-sync-landing-green
+    image: ghcr.io/simplysoftware-app/delta_sync:${IMAGE_TAG_GREEN:?IMAGE_TAG_GREEN is required}
+    ports:
+      - "127.0.0.1:3651:3000"

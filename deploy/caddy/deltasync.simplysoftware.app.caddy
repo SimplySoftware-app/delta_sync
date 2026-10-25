@@ -1,10 +1,23 @@
 # Installed to /opt/apps/edge/sites and imported by edge-caddy.
-# edge-caddy uses host networking, so the upstream is the landing's loopback
-# port published by compose.prod.yaml (127.0.0.1:3600).
+# edge-caddy uses host networking, so the upstreams are the loopback ports of
+# the two landing colours published by compose.prod.yaml: 3650 (blue) and 3651
+# (green). Only one runs at a time outside a rollout. Active health checks send
+# traffic to a colour that answers and skip the stopped one; during a rollout
+# the new colour is healthy before the old one is stopped.
 # Compression happens only here: next.config.ts sets compress: false, so Next
 # does not gzip first and clients that accept it get zstd.
 
 deltasync.simplysoftware.app {
 	encode zstd gzip
-	reverse_proxy 127.0.0.1:3600
+	reverse_proxy 127.0.0.1:3650 127.0.0.1:3651 {
+		lb_policy first
+		health_uri /
+		health_interval 2s
+		health_timeout 2s
+		health_passes 2
+		health_fails 1
+		lb_try_duration 30s
+		lb_try_interval 250ms
+		fail_duration 10s
+	}
 }
