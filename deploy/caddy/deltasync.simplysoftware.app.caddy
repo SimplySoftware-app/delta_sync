@@ -19,5 +19,8 @@ deltasync.simplysoftware.app {
 		lb_try_duration 30s
 		lb_try_interval 250ms
 		fail_duration 10s
+		lb_retry_match {
+			method GET HEAD
+		}
 	}
 }
