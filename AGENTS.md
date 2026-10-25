@@ -19,7 +19,7 @@ Known code flaws: [INCONSISTENCIES.md](INCONSISTENCIES.md) — delete entries yo
 ## Non-negotiable rules
 
 - **The landing server never builds** — CI builds the root `Dockerfile` and pushes to GHCR; the server only pulls. The image name in `.github/workflows/deploy.yml` must match `compose.prod.yaml` (the workflow greps for it).
-- **Port 3600 on loopback is a three-way contract** — `compose.prod.yaml`, `deploy/remote-deploy.sh` and `deploy/caddy/deltasync.simplysoftware.app.caddy` must agree. Never publish it on a public interface.
+- **Ports 3650 (blue) and 3651 (green) on loopback are a three-way contract** — `compose.prod.yaml`, `deploy/remote-deploy.sh` and `deploy/caddy/deltasync.simplysoftware.app.caddy` must agree. Never publish them on a public interface. Deploys roll over blue/green with no downtime; never `up -d` both colours by hand during a rollout. (3600 is only the local `docker-compose.yml` and the pre-blue/green production container.)
 - **Never leave a GHCR login on the server** — the deploy job always runs `docker logout ghcr.io`; keep that step and `packages: read` on the deploy job.
 - **Compression belongs to Caddy** — `compress: false` in `next.config.ts` is deliberate.
 - **The landing is dynamic, not a static export** — the root layout reads the locale per request.
