@@ -11880,7 +11880,7 @@
       "productType": "generatorProduct",
       "DN": {
         "CN": "Runway",
-        "O": "Runway AI, Inc",
+        "O": "Runway AI, Inc.",
         "C": "US"
       },
       "minVersion": "",
@@ -11935,7 +11935,7 @@
       "creation": "2026-08-26",
       "conformance": "2026-09-15",
       "earliestPublicDisclosure": "2026-08-28",
-      "lastModification": "2026-09-15"
+      "lastModification": "2026-10-20"
     }
   },
   {
@@ -13671,7 +13671,7 @@
   "product": {
     "productType": "generatorProduct",
     "DN": {
-      "CN": "Adobe Content Authenticity",
+      "CN": "Adobe Experience Manager Assets",
       "O": "Adobe Inc.",
       "C": "US"
     },
@@ -13745,7 +13745,7 @@
     "creation": "2026-08-17",
     "conformance": "2026-10-05",
     "earliestPublicDisclosure": "2026-08-31",
-    "lastModification": "2026-10-06"
+    "lastModification": "2026-10-20"
   }
 },
   {
@@ -15103,6 +15103,1059 @@
     "conformance": "2026-10-14",
     "earliestPublicDisclosure": "2026-10-11",
     "lastModification": "2026-10-14"
+  }
+},
+  {
+    "recordId": "01a057f5-cd6b-700a-8e3a-6996bddbc14d",
+    "applicant": "vivo Mobile Communication Co., Ltd.",
+    "product": {
+      "productType": "generatorProduct",
+      "DN": {
+        "CN": "Jovi Windows",
+        "O": "vivo Mobile Communication Co., Ltd.",
+        "C": "CN"
+      },
+      "minVersion": "",
+      "assurance": {
+        "maxAssuranceLevel": 1,
+        "attestationMethods": []
+      },
+      "disallowedSignals": {
+        "inception": [
+          "capturedMedia",
+          "capturedMediaStitched",
+          "nonGenAIDigitalCreation"
+        ]
+      }
+    },
+    "specVersion": [
+      "2.4"
+    ],
+    "conformanceProgramVersion": "0.2",
+    "supportsCompressedManifests": true,
+    "containers": {
+      "generate": {
+        "image": [
+          "image/jpeg",
+          "image/png",
+          "image/heif"
+        ],
+        "video": [
+          "video/mp4"
+        ],
+        "audio": [
+          "audio/mp4"
+        ],
+        "documents": [
+          "application/pdf"
+        ],
+        "textHtml": [],
+        "textStructured": []
+        },
+      "validate": {
+        "image": [
+          "image/jpeg",
+          "image/png",
+          "image/heif"
+        ],
+        "video": [
+          "video/mp4"
+        ],
+        "audio": [
+          "audio/mp4"
+        ],
+        "documents": [
+          "application/pdf"
+        ],
+        "textHtml": [],
+        "textStructured": []
+      }
+    },
+    "liveVideo": {
+      "supported": false
+    },
+    "status": "conformant",
+    "dates": {
+      "creation": "2026-08-31",
+      "conformance": "2026-09-22",
+      "earliestPublicDisclosure": "2026-10-08",
+      "lastModification": "2026-10-16"
+    }
+  },
+    {
+    "recordId": "01a014cd-18e9-754f-a25a-f2b74e756167",
+    "applicant": "Hespera AI, LLC",
+    "product": {
+      "productType": "generatorProduct",
+      "DN": {
+        "CN": "Hespera",
+        "O": "Hespera AI, LLC",
+        "C": "US"
+      },
+      "minVersion": "1.0.0",
+      "infoURL": "https://hespera.ai",
+      "assurance": {
+        "maxAssuranceLevel": 1,
+        "attestationMethods": []
+      },
+      "disallowedSignals": {
+        "inception": [
+          "capturedMedia",
+          "capturedMediaStitched",
+          "nonGenAIDigitalCreation"
+        ]
+      }
+    },
+    "specVersion": [
+      "2.2"
+    ],
+    "conformanceProgramVersion": "0.2",
+    "supportsCompressedManifests": false,
+    "containers": {
+      "generate": {
+        "image": [
+          "image/jpeg",
+          "image/png"
+        ],
+        "video": [
+          "video/mp4"
+        ],
+        "audio": [
+          "audio/mpeg"
+        ]
+      },
+      "validate": {
+        "image": [
+          "image/jpeg",
+          "image/png"
+        ],
+        "video": [
+          "video/mp4"
+        ]
+      }
+    },
+    "liveVideo": {
+      "supported": false
+    },
+    "status": "conformant",
+    "dates": {
+      "creation": "2026-08-18",
+      "conformance": "2026-08-26",
+      "earliestPublicDisclosure": "2026-09-15",
+      "lastModification": "2026-10-16"
+    }
+  },
+    {
+  "recordId": "01a01b72-af79-7bb3-a850-24a1d01cb447",
+  "applicant": "TikBox.io Ltd",
+  "product": {
+    "productType": "validatorProduct",
+    "DN": {
+      "CN": "TikBox.io",
+      "O": "TikBox.io Ltd",
+      "C": "GB",
+      "OU": "Trust and Data Governance"
+    },
+    "minVersion": "2.4.0",
+    "infoURL": "https://tikbox.io"
+  },
+  "specVersion": [
+    "2.4"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {},
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/png",
+        "image/svg+xml",
+        "image/gif",
+        "image/x-adobe-dng",
+        "image/tiff",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/avif"
+      ],
+      "video": [
+        "video/x-msvideo",
+        "video/mp4",
+        "video/quicktime"
+      ],
+      "audio": [
+        "audio/flac",
+        "audio/mpeg",
+        "audio/wav",
+        "audio/mp4"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-08-19",
+    "conformance": "2026-10-15",
+    "earliestPublicDisclosure": "2026-08-21",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+  "recordId": "01a122c3-67f3-7fe5-9759-37bebeb2bf71",
+  "applicant": "Trufo Inc.",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Trufo AI Labeling Service",
+      "O": "Trufo Inc.",
+      "C": "US"
+    },
+    "minVersion": "1.5.0",
+    "infoURL": "https://trufo.ai/products/provenance",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.4"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": true,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg",
+        "image/jxl",
+        "image/png",
+        "image/svg+xml",
+        "image/gif",
+        "image/x-adobe-dng",
+        "image/tiff",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/avif",
+        "image/x-tiff-based",
+        "image/x-riff-based"
+      ],
+      "video": [
+        "video/x-msvideo",
+        "video/mp4",
+        "video/quicktime",
+        "video/x-bmff-based",
+        "video/x-riff-based"
+      ],
+      "audio": [
+        "audio/flac",
+        "audio/mpeg",
+        "audio/wav",
+        "audio/mp4",
+        "audio/x-riff-based"
+      ],
+      "documents": [
+        "application/pdf"
+      ]
+    },
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/jxl",
+        "image/png",
+        "image/svg+xml",
+        "image/gif",
+        "image/x-adobe-dng",
+        "image/tiff",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/avif",
+        "image/x-tiff-based",
+        "image/x-riff-based"
+      ],
+      "video": [
+        "video/x-msvideo",
+        "video/mp4",
+        "video/quicktime",
+        "video/x-bmff-based",
+        "video/x-riff-based"
+      ],
+      "audio": [
+        "audio/flac",
+        "audio/mpeg",
+        "audio/wav",
+        "audio/mp4",
+        "audio/x-riff-based"
+      ],
+      "documents": [
+        "application/pdf"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-09",
+    "conformance": "2026-10-17",
+    "earliestPublicDisclosure": "2026-10-12",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+  "recordId": "01a0f957-d3ae-7faf-a77e-1c4912d618f3",
+  "applicant": "Nobyunjungdam",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Takibi",
+      "O": "Nobyunjungdam",
+      "C": "KR"
+    },
+    "minVersion": "1.0.0",
+    "infoURL": "https://takibi.pub",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "documents": [
+        "application/pdf"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-01",
+    "conformance": "2026-10-17",
+    "earliestPublicDisclosure": "2026-10-02",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+  "recordId": "01a14034-284f-755b-83c8-7c325eac8307",
+  "applicant": "Timo Schusser, trading as Traceframe",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Traceframe App",
+      "O": "Timo Schusser, trading as Traceframe",
+      "C": "DE"
+    },
+    "minVersion": "0.2",
+    "infoURL": "https://app.traceframe.eu",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": [
+        "Apple_AppAttest"
+      ]
+    },
+    "disallowedSignals": {
+      "inception": [
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.4"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg"
+      ],
+      "video": [
+        "video/mp4"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-15",
+    "conformance": "2026-10-17",
+    "earliestPublicDisclosure": "2026-10-15",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+  "recordId": "01a139a0-f87d-7d28-9757-83e64a8b1838",
+  "applicant": "Xplosion AI, SL",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "VibeTasking",
+      "O": "Xplosion AI, SL",
+      "C": "ES"
+    },
+    "minVersion": "",
+    "infoURL": "https://vibetasking.com",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.4"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "video": [
+        "video/mp4",
+        "video/quicktime"
+      ],
+      "audio": [
+        "audio/flac",
+        "audio/mpeg",
+        "audio/wav"
+      ]
+    },
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "video": [
+        "video/mp4",
+        "video/quicktime"
+      ],
+      "audio": [
+        "audio/flac",
+        "audio/mpeg",
+        "audio/wav"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-14",
+    "conformance": "2026-10-16",
+    "earliestPublicDisclosure": "2026-10-14",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+    "recordId": "01a10d5f-e863-74a8-b0af-0d4ec88dfb2e",
+    "applicant": "Nexaluna AI Solutions UG (haftungsbeschrankt)",
+    "product": {
+      "productType": "generatorProduct",
+      "DN": {
+        "CN": "PostMaestro.ai",
+        "O": "Nexaluna AI Solutions UG (haftungsbeschraenkt)",
+        "C": "DE"
+      },
+      "minVersion": "1.0.0",
+      "infoURL": "https://app.postmaestro.ai/",
+      "assurance": {
+        "maxAssuranceLevel": 1,
+        "attestationMethods": []
+      },
+      "disallowedSignals": {
+        "inception": [
+          "capturedMedia",
+          "capturedMediaStitched",
+          "nonGenAIDigitalCreation"
+        ]
+      }
+    },
+    "specVersion": [
+      "2.2",
+      "2.4"
+    ],
+    "conformanceProgramVersion": "0.2",
+    "supportsCompressedManifests": false,
+    "containers": {
+      "generate": {
+        "image": [
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ],
+        "video": [
+          "video/mp4"
+        ],
+        "audio": [
+          "audio/mpeg",
+          "audio/wav"
+        ]
+      },
+      "validate": {
+        "image": [
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ],
+        "video": [
+          "video/mp4"
+        ]
+      }
+    },
+    "liveVideo": {
+      "supported": false
+    },
+    "status": "conformant",
+    "dates": {
+      "creation": "2026-10-05",
+      "conformance": "2026-10-16",
+      "earliestPublicDisclosure": "2026-10-05",
+      "lastModification": "2026-10-20"
+    }
+  },
+  {
+  "recordId": "01a06673-4ffd-771f-ace5-4bc2144709af",
+  "applicant": "Elpical Software B.V.",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Pixometry Cloud",
+      "O": "Elpical Software B.V.",
+      "C": "NL"
+    },
+    "minVersion": "1",
+    "infoURL": "https://pixometry.com",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-09-03",
+    "conformance": "2026-10-16",
+    "earliestPublicDisclosure": "2026-10-01",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+  "recordId": "01a0e887-a94e-75e7-b8ae-71d7c7f96044",
+  "applicant": "time2prove S.L",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "TIME2PROVE Android",
+      "O": "time2prove S.L",
+      "C": "ES"
+    },
+    "minVersion": "1.3.0",
+    "infoURL": "https://www.time2prove.com",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg"
+      ],
+      "video": [
+        "video/mp4"
+      ],
+      "audio": [
+        "audio/mp4"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-09-28",
+    "conformance": "2026-10-17",
+    "earliestPublicDisclosure": "2026-10-19",
+    "lastModification": "2026-10-19"
+  }
+},
+  {
+  "recordId": "01a13da2-7a3c-70f9-85f2-8bb2203d95c1",
+  "applicant": "Invinoveritas SpA",
+  "product": {
+    "productType": "validatorProduct",
+    "DN": {
+      "CN": "invinoveritas media verifier",
+      "O": "Invinoveritas SpA",
+      "C": "CL"
+    },
+    "minVersion": "0.1.0",
+    "infoURL": "https://invinoveritas.dev/check"
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {},
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/png"
+      ],
+      "video": [
+        "video/mp4"
+      ],
+      "audio": [
+        "audio/mpeg",
+        "audio/wav"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-15",
+    "conformance": "2026-10-19",
+    "earliestPublicDisclosure": "2026-10-15",
+    "lastModification": "2026-10-20"
+  }
+},
+  {
+  "recordId": "01a13cd7-d03c-7f08-827f-9697a3b04079",
+  "applicant": "AGNUS CLOUD TECNOLOGIA DA INFORMACAO LTDA",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "agnus.chat",
+      "O": "AGNUS CLOUD TECNOLOGIA DA INFORMACAO LTDA",
+      "C": "BR"
+    },
+    "minVersion": "1.0.0",
+    "infoURL": "https://agnus.chat",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/png"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-14",
+    "conformance": "2026-10-20",
+    "earliestPublicDisclosure": "2026-10-14",
+    "lastModification": "2026-10-20"
+  }
+},
+ {
+  "recordId": "01a10ed8-79c1-721d-9d7c-3a9256580301",
+  "applicant": "Google LLC",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Google Media Processing Services",
+      "O": "Google LLC",
+      "C": "US",
+      "OU": "Google System 60032"
+    },
+    "minVersion": "",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.1",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg",
+        "image/png"
+      ],
+      "audio": [
+        "audio/mpeg",
+        "audio/wav"
+      ]
+    },
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/png"
+      ],
+      "audio": [
+        "audio/mpeg",
+        "audio/wav"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-06",
+    "conformance": "2026-10-21",
+    "earliestPublicDisclosure": "2026-10-05",
+    "lastModification": "2026-10-21"
+  }
+},
+  {
+  "recordId": "01a0f1de-a0c1-76b4-8ef1-2541edbd5478",
+  "applicant": "MONOGRID S.r.l.",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Moncler AI Virtual Try-On",
+      "O": "MONOGRID S.r.l.",
+      "C": "IT"
+    },
+    "minVersion": "1.0.0",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-09-30",
+    "conformance": "2026-10-16",
+    "earliestPublicDisclosure": "2026-10-21",
+    "lastModification": "2026-10-21"
+  }
+},
+  {
+  "recordId": "01a143a3-1c23-7eb8-a1e7-70e366773cf6",
+  "applicant": "Samsa Labs AG",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "Samsa Media Service",
+      "O": "Samsa Labs AG",
+      "C": "CH"
+    },
+    "minVersion": "1.6.0",
+    "infoURL": "https://samsa.ai",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.2"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "video": [
+        "video/mp4"
+      ]
+    },
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "video": [
+        "video/mp4"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-10-16",
+    "conformance": "2026-10-22",
+    "earliestPublicDisclosure": "2026-10-16",
+    "lastModification": "2026-10-22"
+  }
+},
+    {
+  "recordId": "01a0ddcc-598c-7bb5-aa54-9bfbd73bea0e",
+  "applicant": "Tauth Labs Inc.",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "TauthID",
+      "O": "Tauth Labs Inc.",
+      "C": "US"
+    },
+    "minVersion": "",
+    "infoURL": "https://tauth.io",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": [
+        "Microsoft_AzureAttestation"
+      ]
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.4"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/jpeg",
+        "image/jxl",
+        "image/png",
+        "image/svg+xml",
+        "image/gif",
+        "image/x-adobe-dng",
+        "image/tiff",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/avif"
+      ],
+      "video": [
+        "video/x-msvideo",
+        "video/mp4",
+        "video/quicktime"
+      ],
+      "documents": [
+        "application/pdf"
+      ]
+    },
+    "validate": {
+      "image": [
+        "image/jpeg",
+        "image/jxl",
+        "image/png",
+        "image/svg+xml",
+        "image/gif",
+        "image/x-adobe-dng",
+        "image/tiff",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/avif"
+      ],
+      "video": [
+        "video/x-msvideo",
+        "video/mp4",
+        "video/quicktime"
+      ],
+      "documents": [
+        "application/pdf"
+      ]
+    }
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-09-26",
+    "conformance": "2026-10-22",
+    "earliestPublicDisclosure": "2026-10-01",
+    "lastModification": "2026-10-22"
+  }
+},
+  {
+  "recordId": "01a08b65-aa09-77e1-9167-755fea0946c3",
+  "applicant": "AVATALK, Inc.",
+  "product": {
+    "productType": "generatorProduct",
+    "DN": {
+      "CN": "AVATALK",
+      "O": "AVATALK, Inc.",
+      "C": "US"
+    },
+    "minVersion": "1.0.0",
+    "infoURL": "https://avatalk.com",
+    "assurance": {
+      "maxAssuranceLevel": 1,
+      "attestationMethods": []
+    },
+    "disallowedSignals": {
+      "inception": [
+        "capturedMedia",
+        "capturedMediaStitched",
+        "nonGenAIDigitalCreation"
+      ]
+    }
+  },
+  "specVersion": [
+    "2.4"
+  ],
+  "conformanceProgramVersion": "0.2",
+  "supportsCompressedManifests": false,
+  "containers": {
+    "generate": {
+      "image": [
+        "image/png",
+        "image/webp"
+      ]
+    },
+    "validate": {}
+  },
+  "liveVideo": {
+    "supported": false
+  },
+  "status": "conformant",
+  "dates": {
+    "creation": "2026-09-10",
+    "conformance": "2026-10-22",
+    "earliestPublicDisclosure": "2026-09-10",
+    "lastModification": "2026-10-22"
   }
 }
 ]
