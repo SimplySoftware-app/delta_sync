@@ -1,24 +1,24 @@
 # Generado por scripts/update-c2pa-trust.py. No editar a mano.
 repo = "c2pa-org/conformance-public"
-commit = "b842170c710222e40c88e8ebfa55fa352aab8058"
-fetched_at = "2026-10-16T13:27:31Z"
+commit = "1adea073d5b0311b2c87034fa216f0e3ae5bb841"
+fetched_at = "2026-11-09T14:45:32Z"
 
 [[file]]
 name = "C2PA-TRUST-LIST.json"
 source = "trust-list/C2PA-TRUST-LIST.json"
-sha256 = "709555a038a78d4b001e96826313957a27771dc66ca881d408ec8cbf2e21627e"
+sha256 = "266b4a571b1fb7bc13df979b1011cea346808f1c13402a0ea73b6e1b67efd6b0"
 
 [[file]]
 name = "C2PA-TRUST-LIST.pem"
 source = "trust-list/C2PA-TRUST-LIST.pem"
-sha256 = "75cacc98b79ecac33713c7ecfb58d4a0ef383f3c1f886e7409f9e37e8664aea5"
+sha256 = "148c1c167e98dc909a0d5793d2feee1022aa60fef5c83a0d6b08f67f4446bc37"
 
 [[file]]
 name = "C2PA-TSA-TRUST-LIST.pem"
 source = "trust-list/C2PA-TSA-TRUST-LIST.pem"
-sha256 = "c688d3555f4a2f1f8d663472bbd37888ff234abdd234c25934c0f9292e4eb5c9"
+sha256 = "eca8347ee71e31d226e00c85b15aca356116fefe6c26ed8c0ee1f954115b1990"
 
 [[file]]
 name = "conforming-products-list.json"
 source = "conforming-products/conforming-products-list.json"
-sha256 = "9292ffd3121f494d5e34a253cdd4a3ec86845bae1d87bb05fb106bcdd8830341"
+sha256 = "92279955a4a88ee43b07704334e35fbfc5a6d3216d0177ed1bc600e99354ade2"
