@@ -1,7 +1,8 @@
 name: Deploy
 
-# Push to main (or run by hand). The landing image is built here and pushed to
-# GHCR; the server only pulls it. Tests stay in ci.yml.
+# Push to main (or run by hand). CI runs first, from ci.yml; the image is not
+# built and nothing is deployed unless that run passes. The landing image is
+# built here and pushed to GHCR; the server only pulls it.
 # Secrets (environment "production"): DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY.
 # Optional secret: DEPLOY_SSH_PORT (22 when unset). The host key comes from
 # ssh-keyscan. GHCR uses GITHUB_TOKEN.
@@ -11,6 +12,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Checkout and the called CI workflow. The image and deploy jobs add packages.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-delta-sync
   cancel-in-progress: false
@@ -19,8 +24,16 @@ env:
   DEPLOY_PATH: /opt/apps/delta_sync
 
 jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: read
+
   image:
     name: Build and push image
+    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,7 +75,7 @@ jobs:
 
   deploy:
     name: Deploy landing
-    needs: image
+    needs: [ci, image]
     runs-on: ubuntu-latest
     environment:
       name: production
