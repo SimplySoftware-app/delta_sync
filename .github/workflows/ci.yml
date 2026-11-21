@@ -7,12 +7,18 @@ on:
   # Lo dispara c2pa-trust-update.yml en su rama: los PR abiertos con
   # GITHUB_TOKEN no lanzan pull_request y main exige estos checks.
   workflow_dispatch:
+  workflow_call:
+
+# Checkout needs contents. The path filter reads the pull request file list.
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  # Decide whether the Android build is needed. The Android job is a required
-  # check, so it must always report a result: a plain `paths:` filter on the
-  # workflow would leave it pending forever. A job skipped through `if:` counts
-  # as passing for required checks.
+  # On pull requests, build Android only when its inputs changed. Skipping the
+  # job with `if:` (instead of a workflow `paths:` filter) still reports a
+  # result, and ci-ok treats that skip as a pass. Pushes, manual runs, and
+  # calls from deploy.yml always build Android.
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -38,37 +44,82 @@ jobs:
     name: Server tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.96.0
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up toolchain
+        uses: dtolnay/rust-toolchain@1.96.0
       - name: Test
         run: cargo test --workspace --locked
 
   android:
     name: Android assembleDebug
     needs: changes
-    # Always build on push to main and manual runs; on PRs only when Android
-    # inputs changed.
+    # Build on every trigger except a pull request that did not touch Android
+    # inputs. That includes push, manual runs, and workflow_call from deploy.
     if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Java
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
       # The app links the Rust core (sdk/kotlin), built for Android with cargo-ndk.
-      - uses: dtolnay/rust-toolchain@1.96.0
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.96.0
         with:
           targets: aarch64-linux-android,x86_64-linux-android
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked --version 4.1.2
       # v3 defaults to `sdkmanager tools`, which Google no longer publishes.
       # v4 skips that package; pin the SDK pieces assembleDebug actually needs.
-      - uses: android-actions/setup-android@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
         with:
           packages: platform-tools platforms;android-36 build-tools;35.0.0 ndk;27.2.12479018
-      - name: Assemble debug, build the AAR, run the JVM tests
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked --version 4.1.2
+      - name: Test
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDebug :sdk:assembleRelease :sdk:testDebugUnitTest --stacktrace --no-daemon
+          ./gradlew :sdk:testDebugUnitTest --stacktrace --no-daemon
+      - name: Build
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug :sdk:assembleRelease --stacktrace --no-daemon
+
+  # Single required check. A job skipped by the path filter counts as a pass;
+  # failure, cancellation, or a missing result does not.
+  ci-ok:
+    name: ci-ok
+    needs: [changes, server, android]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check needed jobs
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          SERVER: ${{ needs.server.result }}
+          ANDROID: ${{ needs.android.result }}
+        run: |
+          set -eu
+          fail=0
+          for item in \
+            "changes:${CHANGES}" \
+            "server:${SERVER}" \
+            "android:${ANDROID}"
+          do
+            name="${item%%:*}"
+            result="${item#*:}"
+            echo "${name}: ${result}"
+            case "${result}" in
+              success|skipped) ;;
+              *)
+                echo "::error::${name} finished with ${result}"
+                fail=1
+                ;;
+            esac
+          done
+          exit "${fail}"
